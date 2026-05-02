@@ -1,0 +1,18 @@
+.cursor/
+debug-*.log
+
+# Local reference copy of the old Laravel app. Do not commit it as an embedded repo.
+exam_kelas_privat/
+
+# Dependencies and generated build output
+**/node_modules/
+**/.next/
+**/dist/
+**/coverage/
+
+# Local runtime/config files
+**/.env
+**/.env.*
+!**/.env.example
+**/data/uploads/
+*.log
