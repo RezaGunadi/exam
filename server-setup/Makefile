@@ -1,0 +1,58 @@
+# Setup server sekali jalan — Debian/Ubuntu.
+#
+# Semua target IDEMPOTEN: aman dijalankan berulang kali, yang sudah ada
+# dilewati. Menjalankan ulang setelah menambah situs di .env hanya membuat
+# yang baru, tanpa menyentuh yang lama.
+#
+#   sudo make server     # seluruh rangkaian
+#   sudo make mysql      # MySQL + pengguna + database per proyek
+#   sudo make nginx      # nginx + PHP-FPM + situs + symlink
+#   sudo make phpmyadmin # panel database (port terpisah + basic auth)
+#   make status          # ringkasan keadaan server
+
+SHELL := /bin/bash
+
+.PHONY: help server preflight mysql nginx phpmyadmin status env
+
+help:
+	@echo "Setup server — target yang tersedia:"
+	@echo "  sudo make server       Pasang & konfigurasi semuanya"
+	@echo "  sudo make mysql        MySQL saja"
+	@echo "  sudo make nginx        nginx + situs saja"
+	@echo "  sudo make phpmyadmin   phpMyAdmin saja"
+	@echo "  make status            Lihat keadaan sekarang"
+	@echo ""
+	@echo "Sesuaikan daftar situs & database di .env (dibuat otomatis dari .env.example)."
+
+env:
+	@if [ ! -f .env ]; then \
+		cp .env.example .env; chmod 600 .env; \
+		echo "  .env dibuat dari .env.example — GANTI password bawaannya."; \
+	fi
+
+preflight: env
+	@bash scripts/00-preflight.sh
+
+mysql: preflight
+	@bash scripts/10-mysql.sh
+
+nginx: preflight
+	@bash scripts/20-nginx.sh
+
+phpmyadmin: nginx
+	@bash scripts/30-phpmyadmin.sh
+
+# Urutannya penting: MySQL lebih dulu supaya phpMyAdmin punya yang dipantau,
+# nginx sebelum phpMyAdmin karena panel itu disajikan lewat nginx.
+server: preflight mysql nginx phpmyadmin
+	@echo ""
+	@echo "Setup selesai."
+	@echo ""
+	@echo "Langkah berikutnya — dilakukan manual dengan sengaja:"
+	@echo "  1. Ganti password bawaan di .env, lalu jalankan ulang: sudo make mysql"
+	@echo "  2. Isi server_name tiap situs di /etc/nginx/sites-available/"
+	@echo "  3. Pasang SSL:  sudo certbot --nginx -d domain-anda"
+	@echo "  4. Batasi akses phpMyAdmin ke IP Anda (lihat komentar di server block-nya)"
+
+status:
+	@bash scripts/status.sh

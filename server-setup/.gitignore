@@ -1,0 +1,4 @@
+# Kredensial — JANGAN pernah dilacak.
+.env
+.mysql-root-password
+*.htpasswd

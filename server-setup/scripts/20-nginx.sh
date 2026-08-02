@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+# Pasang nginx + PHP-FPM, siapkan direktori situs, server block, dan symlink.
+#
+# NGINX HOST ADALAH PINTU DEPAN TUNGGAL (port 80/443) untuk semua proyek.
+# Aplikasi berbasis container TIDAK membuka port publik sendiri — mereka hanya
+# mendengar di 127.0.0.1 dan diteruskan dari sini. Dengan begitu tidak ada
+# rebutan port, dan sertifikat SSL cukup diurus di satu tempat.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh
+. "$SCRIPT_DIR/lib.sh"
+load_env "$(dirname "$SCRIPT_DIR")"
+
+require_root
+require_apt
+
+log "nginx + PHP-FPM"
+apt_install nginx php-fpm php-mysql php-mbstring php-zip php-gd php-curl php-xml
+
+PHP_VER="$(ls /run/php/ 2>/dev/null | grep -oP 'php\K[0-9.]+(?=-fpm.sock)' | head -1)"
+[ -n "$PHP_VER" ] || die "socket PHP-FPM tidak ditemukan di /run/php/"
+PHP_SOCK="/run/php/php${PHP_VER}-fpm.sock"
+ok "PHP-FPM $PHP_VER ($PHP_SOCK)"
+
+systemctl enable --now nginx >/dev/null 2>&1 || true
+
+# ── Direktori situs + server block ─────────────────────────────────────────
+log "menyiapkan situs"
+while read -r site; do
+  [ -n "$site" ] || continue
+  root="/var/www/${site}"
+
+  if [ -d "$root" ]; then
+    skip "direktori $root"
+  else
+    mkdir -p "$root"
+    cat > "${root}/index.html" <<HTML
+<!doctype html>
+<meta charset="utf-8">
+<title>${site}</title>
+<h1>${site}</h1>
+<p>Direktori situs sudah disiapkan. Ganti berkas ini dengan aplikasi Anda.</p>
+HTML
+    chown -R www-data:www-data "$root"
+    ok "direktori $root"
+  fi
+
+  avail="/etc/nginx/sites-available/${site}"
+  if [ -f "$avail" ]; then
+    skip "server block $site"
+  else
+    # exam_kelas_privat_v2 diteruskan ke container (Next.js 3000, API Go 8080).
+    # Sisanya disiapkan sebagai situs statis/PHP — silakan sesuaikan.
+    if [ "$site" = "exam_kelas_privat_v2" ]; then
+      cat > "$avail" <<CONF
+# ${site} — aplikasi container di belakang nginx host.
+# GANTI server_name dengan domain Anda, lalu jalankan: certbot --nginx -d <domain>
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${site}.local;
+
+    client_max_body_size 32M;
+
+    # API Go
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host              \$host;
+        proxy_set_header X-Real-IP         \$remote_addr;
+        proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 300s;
+    }
+
+    # Next.js
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade           \$http_upgrade;
+        proxy_set_header Connection        "upgrade";
+        proxy_set_header Host              \$host;
+        proxy_set_header X-Real-IP         \$remote_addr;
+        proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+CONF
+    else
+      cat > "$avail" <<CONF
+# ${site}
+# GANTI server_name dengan domain Anda, lalu jalankan: certbot --nginx -d <domain>
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${site}.local;
+
+    root /var/www/${site};
+    index index.php index.html;
+
+    client_max_body_size 32M;
+
+    location / {
+        try_files \$uri \$uri/ /index.php?\$query_string;
+    }
+
+    location ~ \.php\$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:${PHP_SOCK};
+    }
+
+    location ~ /\.(?!well-known) { deny all; }
+}
+CONF
+    fi
+    ok "server block $site"
+  fi
+
+  enabled="/etc/nginx/sites-enabled/${site}"
+  if [ -L "$enabled" ]; then
+    skip "symlink $site"
+  else
+    ln -s "$avail" "$enabled"
+    ok "symlink $site"
+  fi
+done < <(split_csv "${SITES:-}")
+
+# Situs bawaan nginx sering menyerobot permintaan tanpa domain cocok.
+if [ -L /etc/nginx/sites-enabled/default ]; then
+  rm -f /etc/nginx/sites-enabled/default
+  ok "situs bawaan nginx dinonaktifkan"
+fi
+
+log "menguji konfigurasi nginx"
+nginx -t || die "konfigurasi nginx tidak valid — tidak ada yang di-reload"
+systemctl reload nginx
+ok "nginx dimuat ulang"
