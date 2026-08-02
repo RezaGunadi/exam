@@ -1,0 +1,6 @@
+# Skrip ini dijalankan di server Linux. Akhir baris CRLF membuat shebang gagal
+# dibaca ("bad interpreter: /usr/bin/env bash^M") — paksa LF apa pun OS yang
+# dipakai untuk menyunting.
+*.sh text eol=lf
+Makefile text eol=lf
+.env.example text eol=lf
