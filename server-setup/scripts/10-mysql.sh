@@ -61,17 +61,46 @@ ok "pengguna anonim & database test dibersihkan"
 # MySQL HANYA mendengar di localhost. Aplikasi mengaksesnya dari host yang sama
 # (termasuk container lewat host-gateway), jadi tidak ada alasan membuka port
 # 3306 ke internet — itu sasaran empuk pemindaian otomatis.
-BIND_CONF=/etc/mysql/mysql.conf.d/zz-local-only.cnf
-if [ ! -f "$BIND_CONF" ]; then
-  cat > "$BIND_CONF" <<'CONF'
-# Ditulis oleh server-setup. MySQL tidak boleh terbuka ke internet.
+#
+# PENTING: 127.0.0.1 SAJA TIDAK CUKUP bila ada aplikasi dalam container.
+# Container menyambung lewat gateway jembatan Docker (biasanya 172.17.0.1),
+# dan MySQL yang hanya mendengar di loopback akan MENOLAK koneksi itu — grant
+# untuk '172.%' pun tidak menolong, karena permintaannya tidak pernah sampai.
+# Jadi alamat gateway Docker ikut didengarkan bila jembatannya ada.
+BIND_CONF=/etc/mysql/mysql.conf.d/zz-bind-address.cnf
+
+detect_docker_gateway() {
+  ip -4 -o addr show docker0 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1
+}
+
+DOCKER_GW="$(detect_docker_gateway)"
+if [ -n "$DOCKER_GW" ]; then
+  BIND_LIST="127.0.0.1,${DOCKER_GW}"
+else
+  BIND_LIST="127.0.0.1"
+fi
+
+# Tulis ulang bila daftar alamatnya berubah — mis. Docker baru dipasang setelah
+# MySQL. Tanpa ini, menjalankan ulang setelah memasang Docker tidak berefek.
+CURRENT_BIND="$(grep -oP '^bind-address\s*=\s*\K.*' "$BIND_CONF" 2>/dev/null | tr -d ' ')"
+if [ "$CURRENT_BIND" = "$BIND_LIST" ]; then
+  skip "bind-address ${BIND_LIST}"
+else
+  cat > "$BIND_CONF" <<CONF
+# Ditulis oleh server-setup.
+#
+# MySQL TIDAK boleh terbuka ke internet, tetapi HARUS terjangkau dari container
+# aplikasi. Karena itu hanya loopback + gateway jembatan Docker yang
+# didengarkan — bukan 0.0.0.0.
 [mysqld]
-bind-address = 127.0.0.1
+bind-address = ${BIND_LIST}
 CONF
   systemctl restart mysql
-  ok "MySQL dikunci ke 127.0.0.1"
-else
-  skip "bind-address 127.0.0.1"
+  ok "MySQL mendengar di ${BIND_LIST}"
+  if [ -z "$DOCKER_GW" ]; then
+    warn "Docker belum terpasang — container belum bisa menyambung ke MySQL."
+    warn "  Jalankan ulang 'sudo make mysql' SETELAH Docker dipasang."
+  fi
 fi
 
 # ── Pengguna aplikasi ──────────────────────────────────────────────────────
