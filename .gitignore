@@ -16,3 +16,21 @@ exam_kelas_privat/
 !**/.env.example
 **/data/uploads/
 *.log
+
+# exam_kelas_privat_v2 kini punya repo sendiri:
+#   https://github.com/RezaGunadi/exam_v2
+# Berkasnya tetap ada di disk, tetapi TIDAK dilacak di sini — dua repo yang
+# melacak berkas sama akan menyimpan versi berbeda, dan tidak ada cara
+# mengetahui mana yang benar.
+#
+# CATATAN: v1 (exam_kelas_privat) TETAP dilacak repo ini.
+exam_kelas_privat_v2/
+
+# Proyek-proyek berikut adalah REPO GIT TERSENDIRI. Menambahkannya ke sini
+# hanya membuat entri rusak: isinya tidak akan ikut saat repo ini di-clone.
+clipers/
+company-kelasprivat/
+ragh/
+ragh-pay/
+ragh_management/
+repost/

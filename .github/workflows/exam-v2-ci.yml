@@ -1,0 +1,106 @@
+name: Exam v2 CI
+
+# Menjalankan verifikasi yang sama seperti saat pengembangan lokal:
+# build + vet + unit test + uji integrasi MySQL + typecheck & build frontend.
+on:
+  push:
+    paths:
+      - "exam_kelas_privat_v2/**"
+      - ".github/workflows/exam-v2-ci.yml"
+  pull_request:
+    paths:
+      - "exam_kelas_privat_v2/**"
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: exam_kelas_privat_v2
+
+jobs:
+  backend:
+    name: Backend (Go + MySQL)
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_DATABASE: exam_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: exam_kelas_privat_v2/backend/go.sum
+
+      - name: Build
+        working-directory: exam_kelas_privat_v2/backend
+        run: go build ./...
+
+      - name: Vet
+        working-directory: exam_kelas_privat_v2/backend
+        run: go vet ./...
+
+      - name: Cek format (gofmt)
+        working-directory: exam_kelas_privat_v2/backend
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "Berkas belum diformat:"; echo "$unformatted"
+            echo "Jalankan: gofmt -w ."
+            exit 1
+          fi
+
+      - name: Unit test
+        working-directory: exam_kelas_privat_v2/backend
+        run: go test ./... -count=1
+
+      - name: Uji integrasi (MySQL sungguhan)
+        working-directory: exam_kelas_privat_v2/backend
+        env:
+          TEST_MYSQL_DSN: "root:@tcp(127.0.0.1:3306)/exam_test?parseTime=true"
+        run: go test ./internal/platform/ -run TestIntegration -v -count=1
+
+  frontend:
+    name: Frontend (Next.js)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: exam_kelas_privat_v2/frontend/package-lock.json
+
+      - name: Install
+        working-directory: exam_kelas_privat_v2/frontend
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: exam_kelas_privat_v2/frontend
+        run: npx tsc --noEmit -p tsconfig.json
+
+      - name: Build produksi
+        working-directory: exam_kelas_privat_v2/frontend
+        run: npm run build
+
+  docker:
+    name: Build image Docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image API
+        run: docker build -f exam_kelas_privat_v2/docker/Dockerfile.api -t exam-api:ci exam_kelas_privat_v2
+      - name: Build image Web
+        run: docker build -f exam_kelas_privat_v2/docker/Dockerfile.web -t exam-web:ci exam_kelas_privat_v2
