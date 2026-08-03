@@ -114,8 +114,16 @@ if [ -f "$TUNING_CONF" ]; then
   skip "penyetelan MySQL"
 else
   TOTAL_MB="$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)"
-  # Sekitar seperempat RAM. Sisanya untuk aplikasi, LLM lokal, dan sistem.
-  POOL_MB=$(( TOTAL_MB / 4 ))
+  if [ -n "${MYSQL_BUFFER_POOL_MB:-}" ]; then
+    # Nilai yang ditentukan sendiri menang. Buffer pool yang lebih besar dari
+    # ukuran database tidak menambah kecepatan apa pun — jadi setel setelah
+    # mengukur data, bukan menebak.
+    POOL_MB="$MYSQL_BUFFER_POOL_MB"
+    warn "buffer pool disetel manual: ${POOL_MB}M"
+  else
+    # Sekitar seperempat RAM. Sisanya untuk aplikasi, LLM lokal, dan sistem.
+    POOL_MB=$(( TOTAL_MB / 4 ))
+  fi
   [ "$POOL_MB" -lt 256 ] && POOL_MB=256
   [ "$POOL_MB" -gt 8192 ] && POOL_MB=8192
 
