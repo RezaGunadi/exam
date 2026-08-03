@@ -104,4 +104,45 @@ while read -r raw; do
   fi
 done < <(split_csv "${DATABASES:-}")
 
+# ── Penyetelan performa ────────────────────────────────────────────────────
+# innodb_buffer_pool_size adalah penentu terbesar performa MySQL, DAN pemakan
+# RAM terbesar. Nilainya dihitung dari RAM yang benar-benar ada, bukan angka
+# tetap: menyetel 3G di mesin 8GB yang juga menjalankan LLM lokal membuat
+# keduanya berebut memori, lalu kernel mulai mematikan proses.
+TUNING_CONF=/etc/mysql/mysql.conf.d/zz-exam-tuning.cnf
+if [ -f "$TUNING_CONF" ]; then
+  skip "penyetelan MySQL"
+else
+  TOTAL_MB="$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)"
+  # Sekitar seperempat RAM. Sisanya untuk aplikasi, LLM lokal, dan sistem.
+  POOL_MB=$(( TOTAL_MB / 4 ))
+  [ "$POOL_MB" -lt 256 ] && POOL_MB=256
+  [ "$POOL_MB" -gt 8192 ] && POOL_MB=8192
+
+  cat > "$TUNING_CONF" <<CONF
+# Ditulis oleh server-setup. RAM terdeteksi: ${TOTAL_MB}MB.
+[mysqld]
+innodb_buffer_pool_size = ${POOL_MB}M
+innodb_buffer_pool_instances = 4
+innodb_redo_log_capacity = 512M
+
+# Ujian menulis sangat sering (autosave jawaban tiap beberapa detik).
+# Menahan flush ke disk setiap transaksi membuat MySQL menjadi penghambat;
+# nilai 2 menukar risiko kehilangan <1 detik transaksi terakhir saat mesin
+# mati mendadak dengan lonjakan throughput yang besar.
+innodb_flush_log_at_trx_commit = 2
+sync_binlog = 0
+skip-log-bin
+innodb_flush_method = O_DIRECT
+
+max_connections = 300
+tmp_table_size = 64M
+max_heap_table_size = 64M
+# Tanpa ini setiap koneksi menunggu lookup DNS balik yang sering gagal.
+skip-name-resolve
+CONF
+  systemctl restart mysql
+  ok "penyetelan MySQL (buffer pool ${POOL_MB}M dari ${TOTAL_MB}MB RAM)"
+fi
+
 log "MySQL selesai"
