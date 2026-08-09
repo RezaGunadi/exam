@@ -55,12 +55,7 @@ while read -r site; do
   repo="$(kv_lookup "$site" "${SITE_REPOS:-}")"
   domain="$(kv_lookup "$site" "${SITE_DOMAINS:-}")"
 
-  if is_proxy_site "$site"; then
-    # nginx hanya meneruskan ke container, jadi /var/www/<situs> tidak pernah
-    # dibaca. Membuatnya tetap hanya menyisakan direktori kosong yang
-    # menyesatkan orang berikutnya yang mencari kode aplikasinya di sana.
-    skip "direktori $root (situs container)"
-  elif [ -d "$root/.git" ]; then
+  if [ -d "$root/.git" ]; then
     # Sudah berupa klon. TIDAK di-pull otomatis: menarik perubahan diam-diam
     # ke situs yang sedang melayani pengunjung bisa menyalakan versi yang belum
     # diuji. Pembaruan adalah keputusan sadar, bukan efek samping setup.
@@ -68,6 +63,9 @@ while read -r site; do
   elif [ -d "$root" ] && [ -n "$(ls -A "$root" 2>/dev/null || true)" ]; then
     skip "direktori $root sudah berisi"
   elif [ -n "$repo" ]; then
+    # Berlaku juga untuk situs container. nginx memang tidak pernah membaca
+    # /var/www/<situs>, tetapi DI SANALAH docker-compose.yml berada — tanpa klon
+    # ini, pindah server berarti menyalin aplikasinya dengan tangan lagi.
     apt_install git >/dev/null 2>&1 || true
     log "mengklon $site"
     rm -rf "$root"
@@ -76,14 +74,18 @@ while read -r site; do
     # di /root/.ssh — BUKAN milik user yang mengetik sudo. Selisih itu adalah
     # penyebab paling sering "gagal klon" yang tidak jelas sebabnya.
     if git clone --depth 1 "$repo" "$root" >"$clone_log" 2>&1; then
-      chown -R www-data:www-data "$root"
+      # Situs container tidak disajikan nginx, jadi tidak perlu milik www-data —
+      # dan JANGAN dijadikan miliknya. `sudo git -C ... pull` akan ditolak
+      # dengan "detected dubious ownership": git membandingkan pemilik repo
+      # dengan SUDO_UID, dan www-data tidak akan pernah cocok.
+      is_proxy_site "$site" || chown -R www-data:www-data "$root"
       ok "klon $site dari $repo"
     else
       # Repo privat butuh kunci SSH. Gagal klon TIDAK boleh menghentikan
       # penyiapan situs lain — direktorinya tetap dibuat agar nginx bisa
       # dikonfigurasi, dan isinya menyusul manual.
       mkdir -p "$root"
-      chown -R www-data:www-data "$root"
+      is_proxy_site "$site" || chown -R www-data:www-data "$root"
       warn "gagal mengklon $site dari $repo"
       # Pesan git-nya ditampilkan apa adanya. Sebelumnya dibuang ke /dev/null,
       # sehingga "Permission denied (publickey)" dan "Repository not found" —
@@ -94,6 +96,11 @@ while read -r site; do
       warn "  Catatan kunci SSH ada di .env.example, bagian SITE_REPOS."
     fi
     rm -f "$clone_log"
+  elif is_proxy_site "$site"; then
+    # Situs container tanpa entri di SITE_REPOS. Tidak dibuatkan direktori:
+    # nginx tidak pernah membacanya, dan direktori kosong berisi halaman
+    # sambutan hanya menyesatkan orang yang mencari kode aplikasinya di sana.
+    skip "direktori $root (situs container tanpa repo)"
   else
     mkdir -p "$root"
     cat > "${root}/index.html" <<HTML

@@ -72,7 +72,7 @@ split_csv() {
 }
 
 # Cari nilai sebuah nama di daftar berformat "nama=nilai" dipisah koma.
-#   kv_lookup exam_kelas_privat_v2 "$SITE_DOMAINS"
+#   kv_lookup exam_v2 "$SITE_DOMAINS"
 #
 # Nama tanpa entri menghasilkan string kosong dan status 0 — pemanggilnya
 # memutuskan sendiri apakah itu masalah. Sebagian besar situs memang belum
@@ -127,8 +127,12 @@ listen_ssl_lines() {
 }
 
 # Situs yang dilayani container (Next.js 3000, API Go 8080), bukan berkas di
-# /var/www. nginx hanya meneruskan ke 127.0.0.1, sehingga direktori situsnya
-# tidak pernah dipakai — dan karena itu tidak dibuat sama sekali.
+# /var/www — server block-nya meneruskan ke 127.0.0.1, bukan menyajikan berkas.
+#
+# Ini TIDAK berarti direktorinya tidak berguna: di situlah docker-compose.yml
+# berada, jadi situs container yang punya entri SITE_REPOS tetap diklon seperti
+# yang lain. Yang dilewati hanya pembuatan direktori kosong berisi halaman
+# sambutan bagi yang tidak punya repo.
 #
 # Daftarnya eksplisit lewat PROXY_SITES di .env. Menebak dari isi direktori akan
 # salah tepat pada saat paling merepotkan, yaitu ketika klon git belum sempat
@@ -137,7 +141,7 @@ is_proxy_site() {
   local target="$1" name
   while read -r name; do
     [ "$name" = "$target" ] && return 0
-  done < <(split_csv "${PROXY_SITES:-exam_kelas_privat_v2}")
+  done < <(split_csv "${PROXY_SITES:-exam_v2}")
   return 1
 }
 

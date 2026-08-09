@@ -77,7 +77,7 @@ terikat ke loopback saja dan container tidak akan pernah bisa menyambung.
 hanya dua baris:
 
 ```bash
-SITE_DOMAINS=exam_kelas_privat_v2=exam.kelasprivat.id
+SITE_DOMAINS=exam_v2=exam.kelasprivat.id
 CF_ORIGIN_CA_KEY=v1.0-...        # My Profile → API Tokens → Origin CA Key
 ```
 
