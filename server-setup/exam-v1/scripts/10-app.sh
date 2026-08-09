@@ -151,20 +151,62 @@ chmod -R u+rwX,g+rwX "$APP_ROOT/storage" "$APP_ROOT/bootstrap/cache"
 ok "izin storage/ & bootstrap/cache"
 
 # ── APP_KEY ────────────────────────────────────────────────────────────────
+# Dibuat dengan openssl, BUKAN `php artisan key:generate`.
+#
+# Dua alasan, dan keduanya nyata di sini:
+#
+#   1. key:generate bekerja dengan MENULIS BALIK ke .env. Berkas itu sengaja
+#      dibiarkan 640 root:www-data — aplikasi boleh membacanya, tidak boleh
+#      mengubahnya — sedangkan artisan berjalan sebagai www-data. Perintahnya
+#      gagal, dan memberi www-data hak tulis atas .env demi satu langkah setup
+#      adalah harga yang salah untuk dibayar.
+#
+#   2. Ayam-dan-telur: sebagian aplikasi tidak bisa boot sama sekali tanpa
+#      APP_KEY ("No application encryption key has been specified"), sehingga
+#      artisan tidak bisa dipakai untuk membuat kunci yang dibutuhkannya
+#      sendiri.
+#
+# Hasilnya identik. key:generate memanggil Encrypter::generateKey(), yang untuk
+# AES-256-CBC — cipher yang dipakai config/app.php aplikasi ini — mengembalikan
+# 32 byte acak lalu di-base64. Persis yang dikerjakan baris di bawah.
+apt_install openssl
 if [ -z "$(get_env_kv "$APP_ENV_FILE" APP_KEY || true)" ]; then
-  artisan key:generate --force >/dev/null || die "key:generate gagal"
+  set_env_kv "$APP_ENV_FILE" APP_KEY "base64:$(openssl rand -base64 32)"
+  chown root:www-data "$APP_ENV_FILE"
+  chmod 640 "$APP_ENV_FILE"
   ok "APP_KEY dibuat"
 else
   skip "APP_KEY (sudah ada — JANGAN diganti, sesi & data terenkripsi ikut hilang)"
 fi
 
 # ── Symlink storage ────────────────────────────────────────────────────────
+# Dibuat langsung, bukan lewat `artisan storage:link`. Perintah itu membuat
+# berkas DI DALAM public/, yang dimiliki root — dan artisan berjalan sebagai
+# www-data. Symlink-nya sendiri tidak butuh apa pun selain satu panggilan ln.
 if [ -L "$APP_WEBROOT/storage" ]; then
   skip "symlink public/storage"
+elif [ -e "$APP_WEBROOT/storage" ]; then
+  warn "$APP_WEBROOT/storage sudah ada tetapi bukan symlink — dibiarkan apa adanya"
 else
-  artisan storage:link >/dev/null || warn "storage:link gagal — unggahan lama mungkin tidak tampil"
-  ok "symlink public/storage"
+  ln -s "$APP_ROOT/storage/app/public" "$APP_WEBROOT/storage"
+  ok "symlink public/storage → storage/app/public"
 fi
+
+# ── Berkas di public/ yang ditulis aplikasi ────────────────────────────────
+# public/ dimiliki root supaya aplikasi tidak bisa menaruh berkas baru di
+# direktori yang disajikan web. Tetapi penjadwal harian menjalankan
+# `sitemap:generate`, yang menulis public/sitemap.xml lewat file_put_contents.
+#
+# Berkasnya dibuat lebih dulu dan diberikan ke www-data. Menulis ulang berkas
+# yang SUDAH ADA hanya butuh izin atas berkas itu, bukan atas direktorinya —
+# jadi sitemap tetap bisa diperbarui tanpa membuka public/ untuk penulisan.
+#
+# Tanpa ini perintahnya gagal tiap hari, dan satu-satunya jejaknya ada di
+# /var/log/exam_v1-schedule.log yang tidak ada yang membaca.
+[ -f "$APP_WEBROOT/sitemap.xml" ] || : > "$APP_WEBROOT/sitemap.xml"
+chown www-data:www-data "$APP_WEBROOT/sitemap.xml"
+chmod 664 "$APP_WEBROOT/sitemap.xml"
+ok "public/sitemap.xml bisa ditulis penjadwal"
 
 # ── Migrasi ────────────────────────────────────────────────────────────────
 # --force karena tidak ada TTY untuk menjawab konfirmasi produksi.
