@@ -124,6 +124,31 @@ find_php_sock() {
   return 1
 }
 
+# Cari pasangan sertifikat yang sudah terpasang untuk sebuah domain.
+# Mencetak "berkas_cert berkas_kunci", atau mengembalikan 1 bila belum ada.
+#
+# Let's Encrypt diperiksa lebih dulu dan nginx menunjuk LANGSUNG ke sana.
+# Berkasnya diperbarui di tempat oleh certbot; kalau disalin ke direktori lain,
+# nginx akan tetap menyajikan salinan lama setelah perpanjangan — persis jenis
+# kegagalan yang tidak menimbulkan error sampai sertifikatnya benar-benar mati.
+site_cert_paths() {
+  # Dipisah per baris dengan sengaja. `local a="$1" b="${a}"` TIDAK bekerja:
+  # bash mengembangkan seluruh argumen `local` lebih dulu, sehingga ${a} masih
+  # bernilai lama (atau kosong, dan `set -u` menghentikan skrip).
+  local domain="$1"
+  local le="/etc/letsencrypt/live/${domain}"
+  local cf="/etc/ssl/cloudflare"
+  if [ -s "$le/fullchain.pem" ] && [ -s "$le/privkey.pem" ]; then
+    echo "$le/fullchain.pem $le/privkey.pem"
+    return 0
+  fi
+  if [ -s "${cf}/${domain}.pem" ] && [ -s "${cf}/${domain}.key" ]; then
+    echo "${cf}/${domain}.pem ${cf}/${domain}.key"
+    return 0
+  fi
+  return 1
+}
+
 # Baris listen untuk blok 443, lengkap dengan cara menyalakan HTTP/2.
 #
 # `http2 on;` baru dikenal nginx 1.25.1. Ubuntu 24.04 masih membawa 1.24, dan di

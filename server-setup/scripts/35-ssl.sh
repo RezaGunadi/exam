@@ -140,18 +140,87 @@ issue_origin_cert() {
   ISSUED_VIA_API=1
 }
 
-# Pastikan sertifikat sebuah domain tersedia di $CERT_DIR.
-ensure_cert() {
-  local domain="$1" cert="$2" key="$3"
+# Pasang hook yang memuat ulang nginx setiap kali certbot memperpanjang.
+#
+# INI YANG MEMBUAT JALUR LET'S ENCRYPT AMAN DIPAKAI.
+#
+# nginx membaca berkas sertifikat SEKALI saat start. Tanpa reload, perpanjangan
+# certbot berhasil di disk tetapi tidak pernah sampai ke pengunjung — situs
+# tetap menyajikan sertifikat lama sampai benar-benar kedaluwarsa, tanpa satu
+# pun pesan error di sepanjang jalan.
+install_renewal_hook() {
+  local hook=/etc/letsencrypt/renewal-hooks/deploy/10-reload-nginx.sh
+  [ -f "$hook" ] && { skip "hook perpanjangan certbot"; return 0; }
+  mkdir -p "$(dirname "$hook")"
+  cat > "$hook" <<'HOOK'
+#!/bin/sh
+# Dipasang oleh server-setup. Lihat scripts/35-ssl.sh.
+nginx -t && systemctl reload nginx
+HOOK
+  chmod +x "$hook"
+  ok "hook perpanjangan certbot dipasang"
+}
 
-  if [ -s "$cert" ] && [ -s "$key" ]; then
+# Minta sertifikat Let's Encrypt lewat certbot.
+#
+# `certonly`, bukan `--nginx` penuh: certbot hanya MENGAMBIL sertifikatnya,
+# sedangkan server block tetap ditulis oleh skrip ini. Dua pihak yang sama-sama
+# menyunting berkas yang sama akan saling menimpa, dan `make nginx` berikutnya
+# akan menghapus pekerjaan certbot tanpa memberi tahu siapa pun.
+issue_letsencrypt_cert() {
+  local domain="$1" reg out
+  apt_install certbot python3-certbot-nginx
+
+  if [ -n "${CERTBOT_EMAIL:-}" ]; then
+    reg="-m ${CERTBOT_EMAIL}"
+  else
+    # Tanpa email, Let's Encrypt tidak bisa memperingatkan bila perpanjangan
+    # berhenti bekerja. Diizinkan, tapi disebutkan terus terang.
+    reg="--register-unsafely-without-email"
+    warn "CERTBOT_EMAIL kosong — tidak ada peringatan bila perpanjangan gagal"
+  fi
+
+  log "meminta sertifikat Let's Encrypt untuk $domain"
+  # shellcheck disable=SC2086
+  if out="$(certbot certonly --nginx --non-interactive --agree-tos $reg             -d "$domain" 2>&1)"; then
+    install_renewal_hook
+    ok "sertifikat Let's Encrypt $domain (berlaku 90 hari, diperpanjang otomatis)"
+    return 0
+  fi
+
+  warn "certbot gagal untuk $domain:"
+  echo "$out" | tail -8 | sed 's/^/       /'
+  warn "  Domainnya harus SUDAH mengarah ke server ini dan port 80 terbuka —"
+  warn "  Let's Encrypt memverifikasi dengan menghubunginya dari luar."
+  return 1
+}
+
+# Pastikan sertifikat sebuah domain tersedia, apa pun cara mendapatkannya.
+#
+# Mengisi CERT_FILE dan KEY_FILE dengan lokasi yang harus dipakai nginx.
+ensure_cert() {
+  local domain="$1" cert="$2" key="$3" paths
+
+  if paths="$(site_cert_paths "$domain")"; then
+    read -r CERT_FILE KEY_FILE <<< "$paths"
     # 30 hari, bukan 0: sertifikat yang kedaluwarsa besok pagi sama saja dengan
     # yang sudah kedaluwarsa — keduanya membuat situs tidak bisa dibuka.
-    if openssl x509 -in "$cert" -noout -checkend 2592000 >/dev/null 2>&1; then
+    if openssl x509 -in "$CERT_FILE" -noout -checkend 2592000 >/dev/null 2>&1; then
       skip "sertifikat $domain"
       return 0
     fi
     warn "sertifikat $domain habis dalam <30 hari — diambil ulang"
+  fi
+
+  # Let's Encrypt lebih dulu bila diminta: ia tidak butuh kredensial API sama
+  # sekali, hanya domain yang sudah mengarah ke sini.
+  if [ "${SSL_METHOD:-cloudflare}" = "letsencrypt" ]; then
+    if issue_letsencrypt_cert "$domain"; then
+      CERT_FILE="/etc/letsencrypt/live/${domain}/fullchain.pem"
+      KEY_FILE="/etc/letsencrypt/live/${domain}/privkey.pem"
+      return 0
+    fi
+    return 1
   fi
 
   if [ -s "$LOCAL_CERTS/${domain}.pem" ] && [ -s "$LOCAL_CERTS/${domain}.key" ]; then
@@ -170,22 +239,27 @@ ensure_cert() {
     fi
     install -m 600 "$LOCAL_CERTS/${domain}.key" "$key"
     install -m 644 "$LOCAL_CERTS/${domain}.pem" "$cert"
+    CERT_FILE="$cert"; KEY_FILE="$key"
     ok "sertifikat $domain dipasang dari certs/"
     return 0
   fi
 
   if [ -n "${CF_ORIGIN_CA_KEY:-}" ]; then
     log "meminta Origin Certificate untuk $domain"
-    issue_origin_cert "$domain" "$cert" "$key" && return 0
+    if issue_origin_cert "$domain" "$cert" "$key"; then
+      CERT_FILE="$cert"; KEY_FILE="$key"
+      return 0
+    fi
     return 1
   fi
 
   warn "belum ada sertifikat untuk $domain — situsnya tetap HTTP saja"
   echo "       Pilih salah satu:"
   echo "       a) isi CF_ORIGIN_CA_KEY di .env, lalu: sudo make ssl"
-  echo "       b) buat manual di dashboard Cloudflare (SSL/TLS → Origin Server),"
-  echo "          simpan sebagai certs/${domain}.pem dan certs/${domain}.key,"
-  echo "          lalu: sudo make ssl"
+  echo "       b) SSL_METHOD=letsencrypt di .env — tanpa kredensial API sama"
+  echo "          sekali, cukup domain yang sudah mengarah ke server ini"
+  echo "       c) buat manual di dashboard Cloudflare (SSL/TLS → Origin Server),"
+  echo "          simpan sebagai certs/${domain}.pem dan certs/${domain}.key"
   return 1
 }
 
@@ -203,8 +277,9 @@ while read -r site; do
 
   # Satu situs yang gagal TIDAK boleh menjatuhkan sisanya: server yang separuh
   # situsnya HTTPS jauh lebih baik daripada yang setupnya berhenti di tengah.
+  CERT_FILE=""; KEY_FILE=""
   if ensure_cert "$domain" "$cert" "$key"; then
-    write_site_conf "$site" "$domain" "$PHP_SOCK" "$cert" "$key"
+    write_site_conf "$site" "$domain" "$PHP_SOCK" "$CERT_FILE" "$KEY_FILE"
     INSTALLED=$((INSTALLED + 1))
   fi
 done < <(split_csv "${SITES:-}")

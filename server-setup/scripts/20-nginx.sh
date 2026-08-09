@@ -119,10 +119,9 @@ HTML
     # Situs berdomain dikelola sepenuhnya dari .env. Bila sertifikatnya sudah
     # ada, blok 443 ikut ditulis di sini juga — supaya `make nginx` yang
     # dijalankan ulang setelah `make ssl` tidak diam-diam mematikan HTTPS.
-    cert="/etc/ssl/cloudflare/${domain}.pem"
-    key="/etc/ssl/cloudflare/${domain}.key"
-    if [ -s "$cert" ] && [ -s "$key" ]; then
-      write_site_conf "$site" "$domain" "$PHP_SOCK" "$cert" "$key"
+    if paths="$(site_cert_paths "$domain")"; then
+      read -r certf keyf <<< "$paths"
+      write_site_conf "$site" "$domain" "$PHP_SOCK" "$certf" "$keyf"
     else
       write_site_conf "$site" "$domain" "$PHP_SOCK"
     fi

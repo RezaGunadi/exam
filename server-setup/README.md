@@ -73,33 +73,60 @@ terikat ke loopback saja dan container tidak akan pernah bisa menyambung.
 
 ## HTTPS
 
-`sudo make server` sudah memasang HTTPS sendiri. Yang perlu Anda isi di `.env`
-hanya dua baris:
+`sudo make server` sudah memasang HTTPS sendiri. Yang menentukan hanya
+`SITE_DOMAINS` — situs yang terdaftar di sana dapat sertifikat, yang tidak
+terdaftar dilewati dan tetap dilayani lewat HTTP.
+
+Ada dua cara mendapatkan sertifikatnya, dipilih lewat `SSL_METHOD`:
+
+| | `letsencrypt` | `cloudflare` (bawaan) |
+|---|---|---|
+| Kredensial | tidak perlu | Origin CA Key / API Token |
+| Masa berlaku | 90 hari, diperpanjang otomatis | 15 tahun, tanpa perpanjangan |
+| Dipercaya browser | ya | **hanya** di belakang proxy Cloudflare |
+| Syarat | domain sudah mengarah ke server, port 80 terbuka | akun Cloudflare |
+
+### Let's Encrypt
 
 ```bash
+SSL_METHOD=letsencrypt
+CERTBOT_EMAIL=anda@contoh.com
 SITE_DOMAINS=exam_v2=exam.kelasprivat.id
-CF_ORIGIN_CA_KEY=v1.0-...        # My Profile → API Tokens → Origin CA Key
 ```
 
-Dari situ `sudo make ssl` menerbitkan sendiri **Cloudflare Origin Certificate**
-tiap domain lewat API, menulis server block 443, mengalihkan port 80 ke HTTPS,
-dan memasang `real_ip` sekalian. Tanpa membuka dashboard.
+`sudo make ssl` memanggil `certbot certonly` — hanya **mengambil** sertifikat;
+server block tetap ditulis skrip ini. Dua pihak yang sama-sama menyunting berkas
+yang sama akan saling menimpa, dan `make nginx` berikutnya akan menghapus
+pekerjaan certbot tanpa memberi tahu siapa pun.
 
-Tidak ingin menaruh kunci akun di server? Kosongkan `CF_ORIGIN_CA_KEY`, buat
-sertifikatnya manual di dashboard (SSL/TLS → Origin Server → Create
-Certificate), lalu simpan sebagai `certs/<domain>.pem` dan `certs/<domain>.key`
-di direktori ini. `sudo make ssl` akan memakainya. Direktori `certs/` tidak ikut
-ke git.
+Sekalian dipasang hook `renewal-hooks/deploy` yang memuat ulang nginx setelah
+perpanjangan. **Tanpa itu jalur ini berbahaya**: nginx membaca sertifikat sekali
+saat start, jadi perpanjangan berhasil di disk tetapi pengunjung tetap menerima
+sertifikat lama sampai benar-benar kedaluwarsa — tanpa satu pun pesan error di
+sepanjang jalan.
 
-**Bukan certbot, dan itu disengaja.** certbot memvalidasi lewat port 80 yang di
-sini sudah diproksikan Cloudflare. Pemasangan pertama biasanya berhasil, lalu
-perpanjangan otomatisnya gagal diam-diam berbulan-bulan kemudian — tepat saat
-tidak ada yang memperhatikan. Origin Certificate berlaku 15 tahun dan tidak
-punya jadwal perpanjangan yang bisa gagal sama sekali.
+### Cloudflare Origin Certificate
 
-Situs yang tidak punya entri di `SITE_DOMAINS` dilewati, dan yang belum punya
-sertifikat tetap dilayani lewat HTTP disertai peringatan. Satu domain bermasalah
-tidak menghentikan setup situs lain.
+```bash
+SSL_METHOD=cloudflare
+CF_ORIGIN_CA_KEY=v1.0-...
+```
+
+Ambil di dash.cloudflare.com → My Profile → API Tokens → **Origin CA Key**.
+API Token dengan izin *SSL and Certificates* juga diterima — keduanya dicoba,
+karena Cloudflare menjawab header yang salah dengan "Authentication failed" yang
+tidak menyinggung jenis kunci sama sekali.
+
+Sertifikat ini **hanya sah di belakang proxy Cloudflare**. Awan diubah jadi
+abu-abu (*DNS only*), browser langsung menolaknya.
+
+Tidak ingin menaruh kredensial di server? Buat manual di dashboard (SSL/TLS →
+Origin Server → Create Certificate), simpan sebagai `certs/<domain>.pem` dan
+`certs/<domain>.key`. `sudo make ssl` akan memakainya, dan mencocokkan modulus
+keduanya lebih dulu — tempelan lewat konsol web sering terpotong. Direktori
+`certs/` tidak ikut ke git.
+
+Satu domain yang gagal tidak menghentikan yang lain.
 
 ## Setelah `make server`
 
