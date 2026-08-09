@@ -53,13 +53,57 @@ ok "PHP-FPM ($PHP_SOCK)"
 systemctl enable --now nginx >/dev/null 2>&1 || true
 
 # ── Direktori situs + server block ─────────────────────────────────────────
+# repo_for mencari URL repositori sebuah situs di SITE_REPOS.
+#
+# Format: "nama=url" dipisah koma, mis.
+#   SITE_REPOS=STN=https://github.com/user/stn.git,ragh=git@github.com:user/ragh.git
+#
+# Situs tanpa entri tetap dibuatkan direktori kosong — tidak semua proyek sudah
+# punya repo, dan exam_kelas_privat_v2 memang tidak butuh isi apa pun karena
+# nginx hanya meneruskannya ke container.
+repo_for() {
+  local target="$1" pair name url
+  while read -r pair; do
+    [ -n "$pair" ] || continue
+    name="${pair%%=*}"
+    url="${pair#*=}"
+    if [ "$name" = "$target" ] && [ "$url" != "$pair" ]; then
+      echo "$url"
+      return 0
+    fi
+  done < <(split_csv "${SITE_REPOS:-}")
+  return 0
+}
+
 log "menyiapkan situs"
 while read -r site; do
   [ -n "$site" ] || continue
   root="/var/www/${site}"
+  repo="$(repo_for "$site" || true)"
 
-  if [ -d "$root" ]; then
-    skip "direktori $root"
+  if [ -d "$root/.git" ]; then
+    # Sudah berupa klon. TIDAK di-pull otomatis: menarik perubahan diam-diam
+    # ke situs yang sedang melayani pengunjung bisa menyalakan versi yang belum
+    # diuji. Pembaruan adalah keputusan sadar, bukan efek samping setup.
+    skip "klon $site (perbarui manual: git -C $root pull)"
+  elif [ -d "$root" ] && [ -n "$(ls -A "$root" 2>/dev/null || true)" ]; then
+    skip "direktori $root sudah berisi"
+  elif [ -n "$repo" ]; then
+    apt_install git >/dev/null 2>&1 || true
+    log "mengklon $site"
+    rm -rf "$root"
+    if git clone --depth 1 "$repo" "$root" >/dev/null 2>&1; then
+      chown -R www-data:www-data "$root"
+      ok "klon $site dari $repo"
+    else
+      # Repo privat butuh kunci deploy. Gagal klon TIDAK boleh menghentikan
+      # penyiapan situs lain — direktorinya tetap dibuat agar nginx bisa
+      # dikonfigurasi, dan isinya menyusul manual.
+      mkdir -p "$root"
+      chown -R www-data:www-data "$root"
+      warn "gagal mengklon $site dari $repo"
+      warn "  Bila repo privat, siapkan kunci deploy lalu: git clone $repo $root"
+    fi
   else
     mkdir -p "$root"
     cat > "${root}/index.html" <<HTML
@@ -70,7 +114,7 @@ while read -r site; do
 <p>Direktori situs sudah disiapkan. Ganti berkas ini dengan aplikasi Anda.</p>
 HTML
     chown -R www-data:www-data "$root"
-    ok "direktori $root"
+    ok "direktori $root (tanpa repo di SITE_REPOS)"
   fi
 
   avail="/etc/nginx/sites-available/${site}"

@@ -48,7 +48,17 @@ kali dijalankan, dan tidak ikut ke git):
 | `DB_USER`, `DB_PASSWORD` | Pengguna MySQL untuk semua aplikasi |
 | `DATABASES` | Database yang dibuat, satu per proyek |
 | `SITES` | Direktori `/var/www/<nama>` + server block + symlink |
+| `SITE_REPOS` | `nama=url` — situs yang terdaftar akan **diklon dari git** |
 | `PMA_*` | phpMyAdmin: port dan basic-auth |
+
+Situs yang punya entri di `SITE_REPOS` diklon dari git; sisanya cukup dibuatkan
+direktori kosong. Klon yang sudah ada **tidak pernah di-pull otomatis** —
+menarik perubahan diam-diam ke situs yang sedang melayani pengunjung bisa
+menyalakan versi yang belum diuji. Pembaruan adalah keputusan sadar:
+
+```bash
+git -C /var/www/<situs> pull
+```
 
 Docker dipasang dari repositori resminya, bukan lewat `curl … | sh`. Skrip
 sekali-jalan itu tidak memberi jalur pembaruan: paketnya tidak ikut
