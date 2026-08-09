@@ -155,6 +155,19 @@ ensure_cert() {
   fi
 
   if [ -s "$LOCAL_CERTS/${domain}.pem" ] && [ -s "$LOCAL_CERTS/${domain}.key" ]; then
+    # Konsol web/VNC kerap menelan karakter saat menempel teks panjang, dan PEM
+    # yang terpotong lolos sampai `nginx -t` — yang lalu mengeluh tentang
+    # konfigurasi, bukan tentang tempelan yang rusak. Dicocokkan di sini selagi
+    # penyebabnya masih bisa disebut dengan tepat.
+    local cmod kmod
+    cmod="$(openssl x509 -noout -modulus -in "$LOCAL_CERTS/${domain}.pem" 2>/dev/null || true)"
+    kmod="$(openssl rsa  -noout -modulus -in "$LOCAL_CERTS/${domain}.key" 2>/dev/null || true)"
+    if [ -z "$cmod" ] || [ "$cmod" != "$kmod" ]; then
+      warn "certs/${domain}.pem dan .key rusak atau tidak berpasangan"
+      warn "  Tempelan lewat konsol web sering terpotong — ulangi KEDUANYA,"
+      warn "  termasuk baris BEGIN/END-nya."
+      return 1
+    fi
     install -m 600 "$LOCAL_CERTS/${domain}.key" "$key"
     install -m 644 "$LOCAL_CERTS/${domain}.pem" "$cert"
     ok "sertifikat $domain dipasang dari certs/"
