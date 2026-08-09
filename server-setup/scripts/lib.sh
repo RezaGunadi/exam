@@ -176,13 +176,24 @@ find_php_sock() {
   return 1
 }
 
-# Apakah paket php<versi>-<ekstensi> bisa dipasang dari repo yang aktif?
+# Apakah paket php<versi>-fpm bisa dipasang dari repo yang aktif?
 #
 # Dipakai untuk memutuskan antara paket berversi dan paket meta bawaan distro.
 # `apt-get install` pada paket yang tidak punya kandidat akan menghentikan
 # seluruh skrip — padahal jawabannya cuma "repo-nya belum ditambahkan".
+#
+# Diputuskan lewat SIMULASI pemasangan, bukan dengan membaca keluaran
+# `apt-cache policy`. Keluaran apt diterjemahkan mengikuti locale server —
+# "Candidate:" menjadi "Kandidat:" pada pemasangan berbahasa Indonesia — dan
+# pencarian teks itu lalu menjawab "tidak tersedia" untuk paket yang sebenarnya
+# ADA. Kegagalannya menuduh repo yang baru saja berhasil ditambahkan, sehingga
+# yang diperiksa orang justru bagian yang tidak rusak.
+#
+# `-s` hanya mensimulasikan: tidak ada yang dipasang, tidak ada kunci apt yang
+# diambil, dan status keluarnya sudah menjawab pertanyaannya tanpa penguraian
+# teks sama sekali.
 php_pkg_available() {
-  apt-cache policy "php${1}-fpm" 2>/dev/null | grep -q 'Candidate: [0-9]'
+  apt-get install -s -y "php${1}-fpm" >/dev/null 2>&1
 }
 
 # Cari pasangan sertifikat yang sudah terpasang untuk sebuah domain.

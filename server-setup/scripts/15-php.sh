@@ -49,33 +49,69 @@ add_php_repo() {
   codename="$(lsb_release -sc 2>/dev/null || true)"
   id="$(. /etc/os-release 2>/dev/null && echo "${ID:-}")"
 
+  # Keluaran perintah repo TIDAK dibuang. Sebelumnya semuanya diarahkan ke
+  # /dev/null, sehingga "tidak ada koneksi ke launchpad", "PPA tidak punya paket
+  # untuk rilis ini", dan "kunci GPG ditolak" — tiga kegagalan dengan perbaikan
+  # yang sama sekali berbeda — terlihat identik dari luar: satu baris GAGAL
+  # tanpa sebab.
+  local repo_log
+  repo_log="$(mktemp)"
+
   if [ "$id" = "ubuntu" ]; then
     apt_install software-properties-common
     log "menambahkan ppa:ondrej/php"
-    add-apt-repository -y ppa:ondrej/php >/dev/null 2>&1 \
-      || die "gagal menambahkan ppa:ondrej/php"
+    if ! add-apt-repository -y ppa:ondrej/php >"$repo_log" 2>&1; then
+      sed 's/^/       /' "$repo_log"
+      rm -f "$repo_log"
+      die "gagal menambahkan ppa:ondrej/php"
+    fi
     ok "repo ppa:ondrej/php"
   else
     [ -n "$codename" ] || die "codename distro tidak terbaca — repo PHP tidak bisa ditambahkan"
     apt_install apt-transport-https gnupg
     log "menambahkan packages.sury.org"
-    curl -fsSLo /usr/share/keyrings/deb.sury.org-php.gpg \
-      https://packages.sury.org/php/apt.gpg \
-      || die "gagal mengunduh kunci packages.sury.org"
+    if ! curl -fsSLo /usr/share/keyrings/deb.sury.org-php.gpg \
+         https://packages.sury.org/php/apt.gpg 2>"$repo_log"; then
+      sed 's/^/       /' "$repo_log"
+      rm -f "$repo_log"
+      die "gagal mengunduh kunci packages.sury.org"
+    fi
     echo "deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] https://packages.sury.org/php/ ${codename} main" \
       > /etc/apt/sources.list.d/php.list
     ok "repo packages.sury.org (${codename})"
   fi
 
-  apt-get update -qq >/dev/null 2>&1 \
-    || warn "apt-get update gagal — lanjut dengan indeks paket yang ada"
+  log "memperbarui indeks paket"
+  if ! apt-get update >"$repo_log" 2>&1; then
+    sed 's/^/       /' "$repo_log"
+    warn "apt-get update gagal — lanjut dengan indeks paket yang ada"
+  fi
+  rm -f "$repo_log"
 }
 
 if ! php_pkg_available "$PHP_VERSION"; then
   add_php_repo
 fi
-php_pkg_available "$PHP_VERSION" \
-  || die "php${PHP_VERSION} tetap tidak tersedia — periksa 'apt-cache policy php${PHP_VERSION}-fpm'"
+
+if ! php_pkg_available "$PHP_VERSION"; then
+  # Alasan sebenarnya dicetak, bukan disuruh cari sendiri. LC_ALL=C supaya
+  # keluarannya sama di server mana pun — dan supaya bisa disalin ke orang lain
+  # tanpa diterjemahkan setengah-setengah.
+  #
+  # `|| true` di tiap baris BUKAN hiasan: perintahnya memang gagal (itu
+  # sebabnya kita di sini), dan dengan `set -o pipefail` kegagalan itu
+  # menghentikan skrip di tengah diagnosis — pesan GAGAL yang menjelaskan
+  # semuanya tidak pernah sampai tercetak.
+  warn "apt-cache policy php${PHP_VERSION}-fpm:"
+  { LC_ALL=C apt-cache policy "php${PHP_VERSION}-fpm" 2>&1 || true; } | sed 's/^/       /'
+  warn "percobaan pemasangan:"
+  { LC_ALL=C apt-get install -s -y "php${PHP_VERSION}-fpm" 2>&1 || true; } \
+    | tail -5 | sed 's/^/       /'
+  warn "berkas repo yang menyebut php:"
+  grep -rls 'ondrej\|sury' /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null \
+    | sed 's/^/       /' || echo "       (tidak ada)"
+  die "php${PHP_VERSION} tetap tidak tersedia"
+fi
 
 # ── Paket ──────────────────────────────────────────────────────────────────
 # Daftarnya = yang selama ini dipasang 20-nginx.sh, ditambah bcmath dan intl
