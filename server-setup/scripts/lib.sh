@@ -71,6 +71,217 @@ split_csv() {
   echo "$1" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$'
 }
 
+# Cari nilai sebuah nama di daftar berformat "nama=nilai" dipisah koma.
+#   kv_lookup exam_kelas_privat_v2 "$SITE_DOMAINS"
+#
+# Nama tanpa entri menghasilkan string kosong dan status 0 — pemanggilnya
+# memutuskan sendiri apakah itu masalah. Sebagian besar situs memang belum
+# punya domain, dan itu keadaan yang sah, bukan kegagalan.
+kv_lookup() {
+  local target="$1" list="${2:-}" pair name value
+  while read -r pair; do
+    [ -n "$pair" ] || continue
+    name="${pair%%=*}"
+    value="${pair#*=}"
+    if [ "$name" = "$target" ] && [ "$value" != "$pair" ]; then
+      echo "$value"
+      return 0
+    fi
+  done < <(split_csv "$list")
+  return 0
+}
+
+# Socket PHP-FPM baru ADA setelah layanannya berjalan. Pencariannya memakai glob
+# shell, bukan `grep -oP`: PCRE tidak selalu tersedia dan gagal pada sebagian
+# locale, dengan pesan yang sama sekali tidak menjelaskan hubungannya dengan PHP.
+find_php_sock() {
+  local candidate
+  for candidate in /run/php/php*-fpm.sock; do
+    [ -S "$candidate" ] && { echo "$candidate"; return 0; }
+  done
+  return 1
+}
+
+# Baris listen untuk blok 443, lengkap dengan cara menyalakan HTTP/2.
+#
+# `http2 on;` baru dikenal nginx 1.25.1. Ubuntu 24.04 masih membawa 1.24, dan di
+# sana direktif itu bukan sekadar diabaikan — `nginx -t` GAGAL, sehingga seluruh
+# konfigurasi (termasuk situs lain yang tadinya sehat) tidak jadi dimuat. Karena
+# itu versinya diperiksa, bukan diasumsikan.
+#
+# Bentuk lama `listen 443 ssl http2` masih diterima versi baru, hanya memberi
+# peringatan — jadi ia yang dipakai saat versinya tidak terbaca sama sekali.
+listen_ssl_lines() {
+  local ver
+  ver="$(nginx -v 2>&1 | sed -n 's#.*nginx/\([0-9][0-9.]*\).*#\1#p')"
+
+  if [ -n "$ver" ] && \
+     [ "$(printf '1.25.1\n%s\n' "$ver" | sort -V | head -1)" = "1.25.1" ]; then
+    echo "    listen 443 ssl;"
+    echo "    listen [::]:443 ssl;"
+    echo "    http2 on;"
+  else
+    echo "    listen 443 ssl http2;"
+    echo "    listen [::]:443 ssl http2;"
+  fi
+}
+
+# Situs yang dilayani container (Next.js 3000, API Go 8080), bukan berkas di
+# /var/www. nginx hanya meneruskan ke 127.0.0.1, sehingga direktori situsnya
+# tidak pernah dipakai — dan karena itu tidak dibuat sama sekali.
+#
+# Daftarnya eksplisit lewat PROXY_SITES di .env. Menebak dari isi direktori akan
+# salah tepat pada saat paling merepotkan, yaitu ketika klon git belum sempat
+# berjalan dan direktorinya masih kosong.
+is_proxy_site() {
+  local target="$1" name
+  while read -r name; do
+    [ "$name" = "$target" ] && return 0
+  done < <(split_csv "${PROXY_SITES:-exam_kelas_privat_v2}")
+  return 1
+}
+
+# Isi server block sebuah situs — bagian yang sama untuk HTTP maupun HTTPS.
+site_body() {
+  local site="$1" php_sock="$2"
+
+  # Unggahan jawaban bergambar dan impor soal lewat di sini.
+  echo "    client_max_body_size 32M;"
+  echo ""
+
+  if is_proxy_site "$site"; then
+    cat <<CONF
+    # ── API Go ────────────────────────────────────────────────────────────
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host              \$host;
+        # \$remote_addr, BUKAN \$proxy_add_x_forwarded_for.
+        #
+        # Yang kedua menyambungkan header X-Forwarded-For yang dikirim
+        # pengunjung dengan alamat aslinya. Aplikasi membaca entri pertama —
+        # yaitu bagian yang dikarang pengunjung. Cukup mengganti isinya tiap
+        # percobaan, dan pembatas login 3-kali-salah hilang sama sekali.
+        #
+        # Di belakang Cloudflare, 25-cloudflare-realip.sh yang memulihkan
+        # \$remote_addr dari CF-Connecting-IP.
+        proxy_set_header X-Real-IP         \$remote_addr;
+        proxy_set_header X-Forwarded-For   \$remote_addr;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+
+        # Pengumpulan jawaban dan koreksi otomatis bisa memakan waktu. Timeout
+        # pendek di sini berarti jawaban siswa ditolak di detik-detik terakhir
+        # ujian — kegagalan yang paling mahal dari semuanya.
+        proxy_read_timeout      300s;
+        proxy_send_timeout      300s;
+        proxy_request_buffering off;
+    }
+
+    # ── Next.js ───────────────────────────────────────────────────────────
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade           \$http_upgrade;
+        proxy_set_header Connection        "upgrade";
+        proxy_set_header Host              \$host;
+        proxy_set_header X-Real-IP         \$remote_addr;
+        proxy_set_header X-Forwarded-For   \$remote_addr;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 300s;
+    }
+CONF
+  else
+    cat <<CONF
+    root  /var/www/${site};
+    index index.php index.html;
+
+    location / {
+        try_files \$uri \$uri/ /index.php?\$query_string;
+    }
+
+    location ~ \.php\$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:${php_sock};
+    }
+
+    location ~ /\.(?!well-known) { deny all; }
+CONF
+  fi
+}
+
+# Tulis server block sebuah situs ke /etc/nginx/sites-available/<situs>.
+#
+#   write_site_conf <situs> <domain> <socket_php> [berkas_cert] [berkas_kunci]
+#
+# Bila cert & kunci diisi, blok 443 ikut ditulis dan port 80 hanya mengalihkan.
+# Berkas yang isinya sudah sama persis dilewati, sehingga menjalankan ulang
+# tidak menghasilkan cadangan palsu maupun reload yang tidak perlu.
+write_site_conf() {
+  local site="$1" domain="$2" php_sock="$3" cert="${4:-}" key="${5:-}"
+  # NGINX_SITES_DIR hanya untuk menguji keluaran fungsi ini tanpa root.
+  local avail="${NGINX_SITES_DIR:-/etc/nginx/sites-available}/${site}"
+  local tmp
+  tmp="$(mktemp)"
+
+  {
+    echo "# ${site} — dibuat oleh server-setup (sudo make nginx / make ssl)."
+    echo "# Suntingan manual akan tertimpa saat skrip dijalankan ulang;"
+    echo "# salinan berkas lama disimpan sebagai ${avail}.orig."
+    echo ""
+
+    if [ -n "$cert" ] && [ -n "$key" ]; then
+      cat <<CONF
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${domain};
+
+    # Cloudflare tetap boleh menyambung lewat 80; sisanya diarahkan ke HTTPS.
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
+}
+
+server {
+CONF
+      listen_ssl_lines
+      cat <<CONF
+    server_name ${domain};
+
+    ssl_certificate     ${cert};
+    ssl_certificate_key ${key};
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_session_cache   shared:SSL:10m;
+    ssl_session_timeout 1d;
+
+CONF
+      site_body "$site" "$php_sock"
+      echo "}"
+    else
+      cat <<CONF
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${domain};
+
+CONF
+      site_body "$site" "$php_sock"
+      echo "}"
+    fi
+  } > "$tmp"
+
+  if [ -f "$avail" ] && cmp -s "$tmp" "$avail"; then
+    rm -f "$tmp"
+    skip "server block $site"
+    return 0
+  fi
+
+  backup_once "$avail"
+  mv "$tmp" "$avail"
+  chmod 644 "$avail"
+  ok "server block $site → ${domain}${cert:+ (HTTPS)}"
+}
+
 # Nama database yang aman dipakai MySQL.
 sanitize_db_name() {
   echo "$1" | tr '[:upper:]-' '[:lower:]_' | sed 's/[^a-z0-9_]//g'

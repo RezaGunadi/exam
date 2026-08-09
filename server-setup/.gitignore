@@ -2,3 +2,6 @@
 .env
 .mysql-root-password
 *.htpasswd
+
+# Sertifikat yang disalin manual — kunci privat, jangan pernah dilacak.
+certs/

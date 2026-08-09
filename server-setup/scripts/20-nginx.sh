@@ -20,19 +20,7 @@ apt_install nginx php-fpm php-mysql php-mbstring php-zip php-gd php-curl php-xml
 # Socket PHP-FPM baru ADA setelah layanannya berjalan, jadi layanannya
 # dinyalakan lebih dulu. Sebelumnya skrip langsung berhenti bila socket belum
 # muncul — padahal penyebabnya cuma layanan yang belum start, bukan pemasangan
-# yang gagal.
-#
-# Pencariannya memakai glob shell, bukan `grep -oP`: PCRE tidak selalu tersedia
-# dan gagal pada sebagian locale, dengan pesan yang sama sekali tidak
-# menjelaskan hubungannya dengan PHP.
-find_php_sock() {
-  local candidate
-  for candidate in /run/php/php*-fpm.sock; do
-    [ -S "$candidate" ] && { echo "$candidate"; return 0; }
-  done
-  return 1
-}
-
+# yang gagal. (find_php_sock ada di lib.sh; 35-ssl.sh memakainya juga.)
 PHP_SOCK="$(find_php_sock || true)"
 if [ -z "$PHP_SOCK" ]; then
   log "menyalakan PHP-FPM"
@@ -53,35 +41,26 @@ ok "PHP-FPM ($PHP_SOCK)"
 systemctl enable --now nginx >/dev/null 2>&1 || true
 
 # ── Direktori situs + server block ─────────────────────────────────────────
-# repo_for mencari URL repositori sebuah situs di SITE_REPOS.
+# Repositori diambil dari SITE_REPOS, domain dari SITE_DOMAINS — keduanya
+# berformat "nama=nilai" dipisah koma dan dibaca lewat kv_lookup di lib.sh.
 #
-# Format: "nama=url" dipisah koma, mis.
-#   SITE_REPOS=STN=https://github.com/user/stn.git,ragh=git@github.com:user/ragh.git
-#
-# Situs tanpa entri tetap dibuatkan direktori kosong — tidak semua proyek sudah
-# punya repo, dan exam_kelas_privat_v2 memang tidak butuh isi apa pun karena
-# nginx hanya meneruskannya ke container.
-repo_for() {
-  local target="$1" pair name url
-  while read -r pair; do
-    [ -n "$pair" ] || continue
-    name="${pair%%=*}"
-    url="${pair#*=}"
-    if [ "$name" = "$target" ] && [ "$url" != "$pair" ]; then
-      echo "$url"
-      return 0
-    fi
-  done < <(split_csv "${SITE_REPOS:-}")
-  return 0
-}
+# Situs tanpa entri repo tetap dibuatkan direktori kosong — tidak semua proyek
+# sudah punya repo, dan exam_kelas_privat_v2 memang tidak butuh isi apa pun
+# karena nginx hanya meneruskannya ke container.
 
 log "menyiapkan situs"
 while read -r site; do
   [ -n "$site" ] || continue
   root="/var/www/${site}"
-  repo="$(repo_for "$site" || true)"
+  repo="$(kv_lookup "$site" "${SITE_REPOS:-}")"
+  domain="$(kv_lookup "$site" "${SITE_DOMAINS:-}")"
 
-  if [ -d "$root/.git" ]; then
+  if is_proxy_site "$site"; then
+    # nginx hanya meneruskan ke container, jadi /var/www/<situs> tidak pernah
+    # dibaca. Membuatnya tetap hanya menyisakan direktori kosong yang
+    # menyesatkan orang berikutnya yang mencari kode aplikasinya di sana.
+    skip "direktori $root (situs container)"
+  elif [ -d "$root/.git" ]; then
     # Sudah berupa klon. TIDAK di-pull otomatis: menarik perubahan diam-diam
     # ke situs yang sedang melayani pengunjung bisa menyalakan versi yang belum
     # diuji. Pembaruan adalah keputusan sadar, bukan efek samping setup.
@@ -92,18 +71,29 @@ while read -r site; do
     apt_install git >/dev/null 2>&1 || true
     log "mengklon $site"
     rm -rf "$root"
-    if git clone --depth 1 "$repo" "$root" >/dev/null 2>&1; then
+    clone_log="$(mktemp)"
+    # Klon dijalankan sebagai root (lewat sudo), jadi kunci SSH yang dipakai ada
+    # di /root/.ssh — BUKAN milik user yang mengetik sudo. Selisih itu adalah
+    # penyebab paling sering "gagal klon" yang tidak jelas sebabnya.
+    if git clone --depth 1 "$repo" "$root" >"$clone_log" 2>&1; then
       chown -R www-data:www-data "$root"
       ok "klon $site dari $repo"
     else
-      # Repo privat butuh kunci deploy. Gagal klon TIDAK boleh menghentikan
+      # Repo privat butuh kunci SSH. Gagal klon TIDAK boleh menghentikan
       # penyiapan situs lain — direktorinya tetap dibuat agar nginx bisa
       # dikonfigurasi, dan isinya menyusul manual.
       mkdir -p "$root"
       chown -R www-data:www-data "$root"
       warn "gagal mengklon $site dari $repo"
-      warn "  Bila repo privat, siapkan kunci deploy lalu: git clone $repo $root"
+      # Pesan git-nya ditampilkan apa adanya. Sebelumnya dibuang ke /dev/null,
+      # sehingga "Permission denied (publickey)" dan "Repository not found" —
+      # dua kegagalan dengan perbaikan yang sama sekali berbeda — terlihat
+      # identik dari luar.
+      sed 's/^/       /' "$clone_log"
+      warn "  Repo privat? Periksa: sudo ssh -T git@github.com"
+      warn "  Catatan kunci SSH ada di .env.example, bagian SITE_REPOS."
     fi
+    rm -f "$clone_log"
   else
     mkdir -p "$root"
     cat > "${root}/index.html" <<HTML
@@ -118,94 +108,27 @@ HTML
   fi
 
   avail="/etc/nginx/sites-available/${site}"
-  if [ -f "$avail" ]; then
-    skip "server block $site"
-  else
-    # exam_kelas_privat_v2 diteruskan ke container (Next.js 3000, API Go 8080).
-    # Sisanya disiapkan sebagai situs statis/PHP — silakan sesuaikan.
-    if [ "$site" = "exam_kelas_privat_v2" ]; then
-      cat > "$avail" <<CONF
-# ${site} — aplikasi container di belakang nginx host.
-# GANTI server_name dengan domain Anda, lalu jalankan: certbot --nginx -d <domain>
-server {
-    listen 80;
-    listen [::]:80;
-    server_name ${site}.local;
-
-    client_max_body_size 32M;
-
-    # API Go
-    location /api/ {
-        proxy_pass http://127.0.0.1:8080;
-        proxy_http_version 1.1;
-        proxy_set_header Host              \$host;
-        # \$remote_addr, BUKAN \$proxy_add_x_forwarded_for.
-        #
-        # Yang kedua menyambungkan header X-Forwarded-For yang dikirim
-        # pengunjung dengan alamat aslinya. Aplikasi membaca entri pertama —
-        # yaitu bagian yang dikarang pengunjung. Cukup mengganti isinya tiap
-        # percobaan, dan pembatas login 3-kali-salah hilang sama sekali.
-        #
-        # nginx di sini adalah pintu terluar, jadi \$remote_addr sudah alamat
-        # sebenarnya. Di belakang Cloudflare, 25-cloudflare-realip.sh yang
-        # memulihkannya dari CF-Connecting-IP.
-        proxy_set_header X-Real-IP         \$remote_addr;
-        proxy_set_header X-Forwarded-For   \$remote_addr;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_read_timeout 300s;
-    }
-
-    # Next.js
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade           \$http_upgrade;
-        proxy_set_header Connection        "upgrade";
-        proxy_set_header Host              \$host;
-        # \$remote_addr, BUKAN \$proxy_add_x_forwarded_for.
-        #
-        # Yang kedua menyambungkan header X-Forwarded-For yang dikirim
-        # pengunjung dengan alamat aslinya. Aplikasi membaca entri pertama —
-        # yaitu bagian yang dikarang pengunjung. Cukup mengganti isinya tiap
-        # percobaan, dan pembatas login 3-kali-salah hilang sama sekali.
-        #
-        # nginx di sini adalah pintu terluar, jadi \$remote_addr sudah alamat
-        # sebenarnya. Di belakang Cloudflare, 25-cloudflare-realip.sh yang
-        # memulihkannya dari CF-Connecting-IP.
-        proxy_set_header X-Real-IP         \$remote_addr;
-        proxy_set_header X-Forwarded-For   \$remote_addr;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-}
-CONF
+  if [ -n "$domain" ]; then
+    # Situs berdomain dikelola sepenuhnya dari .env. Bila sertifikatnya sudah
+    # ada, blok 443 ikut ditulis di sini juga — supaya `make nginx` yang
+    # dijalankan ulang setelah `make ssl` tidak diam-diam mematikan HTTPS.
+    cert="/etc/ssl/cloudflare/${domain}.pem"
+    key="/etc/ssl/cloudflare/${domain}.key"
+    if [ -s "$cert" ] && [ -s "$key" ]; then
+      write_site_conf "$site" "$domain" "$PHP_SOCK" "$cert" "$key"
     else
-      cat > "$avail" <<CONF
-# ${site}
-# GANTI server_name dengan domain Anda, lalu jalankan: certbot --nginx -d <domain>
-server {
-    listen 80;
-    listen [::]:80;
-    server_name ${site}.local;
-
-    root /var/www/${site};
-    index index.php index.html;
-
-    client_max_body_size 32M;
-
-    location / {
-        try_files \$uri \$uri/ /index.php?\$query_string;
-    }
-
-    location ~ \.php\$ {
-        include snippets/fastcgi-php.conf;
-        fastcgi_pass unix:${PHP_SOCK};
-    }
-
-    location ~ /\.(?!well-known) { deny all; }
-}
-CONF
+      write_site_conf "$site" "$domain" "$PHP_SOCK"
     fi
-    ok "server block $site"
+  elif [ -f "$avail" ]; then
+    # Tanpa domain di .env, skrip tidak tahu nilai yang benar — dan menimpanya
+    # dengan <situs>.local akan mematikan situs yang sudah jalan.
+    skip "server block $site (isi SITE_DOMAINS untuk mengelolanya dari .env)"
+  else
+    # Belum ada domain dan belum ada server block: dibuatkan dengan nama
+    # sementara agar konfigurasi nginx tetap valid, tapi situsnya belum bisa
+    # dibuka dari internet sampai SITE_DOMAINS diisi.
+    write_site_conf "$site" "${site}.local" "$PHP_SOCK"
+    warn "$site belum punya domain — tambahkan ke SITE_DOMAINS di .env"
   fi
 
   enabled="/etc/nginx/sites-enabled/${site}"

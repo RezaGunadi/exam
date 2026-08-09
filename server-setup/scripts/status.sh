@@ -26,8 +26,17 @@ if [ -d /etc/nginx/sites-enabled ]; then
   for link in /etc/nginx/sites-enabled/*; do
     [ -e "$link" ] || continue
     name="$(basename "$link")"
-    domain="$(grep -m1 -oP 'server_name\s+\K[^;]+' "$link" 2>/dev/null || echo '?')"
-    printf "  %-28s %s\n" "$name" "$domain"
+    # sed, bukan `grep -oP`: PCRE tidak selalu tersedia dan gagal pada sebagian
+    # locale, dengan pesan yang tidak menyinggung penyebabnya sama sekali.
+    domain="$(sed -n 's/^[[:space:]]*server_name[[:space:]]\+\([^;]*\);.*/\1/p' \
+      "$link" 2>/dev/null | head -1)"
+    [ -n "$domain" ] || domain='?'
+    if grep -q 'listen[[:space:]].*443' "$link" 2>/dev/null; then
+      scheme="${C_OK}https${C_RESET}"
+    else
+      scheme="${C_WARN}http saja${C_RESET}"
+    fi
+    printf "  %-28s %-28s ${scheme}\n" "$name" "$domain"
   done
 else
   echo "  (nginx belum terpasang)"

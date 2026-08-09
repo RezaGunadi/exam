@@ -48,7 +48,9 @@ kali dijalankan, dan tidak ikut ke git):
 | `DB_USER`, `DB_PASSWORD` | Pengguna MySQL untuk semua aplikasi |
 | `DATABASES` | Database yang dibuat, satu per proyek |
 | `SITES` | Direktori `/var/www/<nama>` + server block + symlink |
+| `SITE_DOMAINS` | `nama=domain` — mengisi `server_name` dan menentukan situs mana yang dapat HTTPS |
 | `SITE_REPOS` | `nama=url` — situs yang terdaftar akan **diklon dari git** |
+| `CF_ORIGIN_CA_KEY` | Origin CA Key Cloudflare — sertifikat diterbitkan sendiri, tanpa dashboard |
 | `PMA_*` | phpMyAdmin: port dan basic-auth |
 
 Situs yang punya entri di `SITE_REPOS` diklon dari git; sisanya cukup dibuatkan
@@ -69,21 +71,57 @@ MySQL. Skrip MySQL menentukan alamat yang didengarkan dari ada-tidaknya
 jembatan `docker0`; bila Docker menyusul belakangan, MySQL sudah terlanjur
 terikat ke loopback saja dan container tidak akan pernah bisa menyambung.
 
+## HTTPS
+
+`sudo make server` sudah memasang HTTPS sendiri. Yang perlu Anda isi di `.env`
+hanya dua baris:
+
+```bash
+SITE_DOMAINS=exam_kelas_privat_v2=exam.kelasprivat.id
+CF_ORIGIN_CA_KEY=v1.0-...        # My Profile → API Tokens → Origin CA Key
+```
+
+Dari situ `sudo make ssl` menerbitkan sendiri **Cloudflare Origin Certificate**
+tiap domain lewat API, menulis server block 443, mengalihkan port 80 ke HTTPS,
+dan memasang `real_ip` sekalian. Tanpa membuka dashboard.
+
+Tidak ingin menaruh kunci akun di server? Kosongkan `CF_ORIGIN_CA_KEY`, buat
+sertifikatnya manual di dashboard (SSL/TLS → Origin Server → Create
+Certificate), lalu simpan sebagai `certs/<domain>.pem` dan `certs/<domain>.key`
+di direktori ini. `sudo make ssl` akan memakainya. Direktori `certs/` tidak ikut
+ke git.
+
+**Bukan certbot, dan itu disengaja.** certbot memvalidasi lewat port 80 yang di
+sini sudah diproksikan Cloudflare. Pemasangan pertama biasanya berhasil, lalu
+perpanjangan otomatisnya gagal diam-diam berbulan-bulan kemudian — tepat saat
+tidak ada yang memperhatikan. Origin Certificate berlaku 15 tahun dan tidak
+punya jadwal perpanjangan yang bisa gagal sama sekali.
+
+Situs yang tidak punya entri di `SITE_DOMAINS` dilewati, dan yang belum punya
+sertifikat tetap dilayani lewat HTTP disertai peringatan. Satu domain bermasalah
+tidak menghentikan setup situs lain.
+
 ## Setelah `make server`
 
-Empat langkah ini **sengaja tidak diotomatiskan**, karena butuh keputusan Anda:
+Empat langkah ini **sengaja tidak diotomatiskan**, karena butuh keputusan Anda
+atau akses yang tidak dimiliki server:
 
 1. **Ganti password bawaan** di `.env`, lalu `sudo make mysql` lagi.
-2. **Isi `server_name`** tiap situs di `/etc/nginx/sites-available/`.
-3. **Pasang SSL**: `sudo certbot --nginx -d domain-anda`.
+2. **Arahkan DNS** tiap domain ke IP server ini, dalam keadaan *proxied*
+   (awan oranye).
+3. **Cloudflare → SSL/TLS → Overview → Full (strict)** — setelah langkah 2
+   selesai. Dinaikkan lebih awal, pengunjung menerima error 525.
 4. **Batasi phpMyAdmin** ke IP Anda — lihat komentar `allow`/`deny` di server
    block-nya.
 
-Periksa hasilnya kapan saja dengan `make status`.
+Periksa hasilnya kapan saja dengan `make status`; kolom terakhirnya menunjukkan
+situs mana yang sudah `https` dan mana yang masih `http saja`.
 
 ## Di belakang Cloudflare
 
-Situs yang diproksikan Cloudflare butuh satu langkah tambahan:
+`make ssl` sudah memanggil ini otomatis begitu ada Origin Certificate yang
+diterbitkan. Jalankan sendiri bila situs Anda diproksikan Cloudflare tetapi
+sertifikatnya diurus di luar skrip ini:
 
 ```bash
 sudo make cloudflare
@@ -101,13 +139,6 @@ rentang tersebut. Tanpa syarat itu, siapa pun yang menghubungi IP server secara
 langsung bisa mengarang header dan menyamar sebagai alamat mana pun.
 
 Jalankan ulang sesekali; rentang Cloudflare bertambah dari waktu ke waktu.
-
-Untuk HTTPS-nya, pakai **Origin Certificate** (SSL/TLS → Origin Server →
-Create Certificate), bukan certbot: certbot memvalidasi lewat port 80 yang
-sudah diproksikan Cloudflare, sehingga perpanjangannya bisa gagal diam-diam
-berbulan-bulan kemudian — tepat saat tidak ada yang memperhatikan. Origin
-Certificate berlaku 15 tahun. Templat server block-nya ada di
-[`templates/site-ssl-cloudflare.conf.example`](templates/site-ssl-cloudflare.conf.example).
 
 ## Catatan keamanan
 

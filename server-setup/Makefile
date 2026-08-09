@@ -8,24 +8,26 @@
 #   sudo make docker     # Docker Engine + plugin Compose
 #   sudo make mysql      # MySQL + pengguna + database per proyek
 #   sudo make nginx      # nginx + PHP-FPM + situs + symlink
+#   sudo make ssl        # Origin Certificate Cloudflare + server block 443
 #   sudo make phpmyadmin # panel database (port terpisah + basic auth)
 #   make status          # ringkasan keadaan server
 
 SHELL := /bin/bash
 
-.PHONY: help server preflight docker mysql nginx cloudflare phpmyadmin status env
+.PHONY: help server preflight docker mysql nginx cloudflare ssl phpmyadmin status env
 
 help:
 	@echo "Setup server — target yang tersedia:"
-	@echo "  sudo make server       Pasang & konfigurasi semuanya"
+	@echo "  sudo make server       Pasang & konfigurasi semuanya, termasuk HTTPS"
 	@echo "  sudo make docker       Docker Engine + plugin Compose saja"
 	@echo "  sudo make mysql        MySQL saja"
 	@echo "  sudo make nginx        nginx + situs saja"
+	@echo "  sudo make ssl          HTTPS: Origin Certificate + server block 443"
 	@echo "  sudo make cloudflare   Pulihkan IP asli di belakang proxy Cloudflare"
 	@echo "  sudo make phpmyadmin   phpMyAdmin saja"
 	@echo "  make status            Lihat keadaan sekarang"
 	@echo ""
-	@echo "Sesuaikan daftar situs & database di .env (dibuat otomatis dari .env.example)."
+	@echo "Sesuaikan daftar situs, domain & database di .env (dibuat otomatis dari .env.example)."
 
 env:
 	@if [ ! -f .env ]; then \
@@ -54,19 +56,26 @@ nginx: preflight
 cloudflare: nginx
 	@bash scripts/25-cloudflare-realip.sh
 
+# Ikut dalam `make server`, tapi tidak memaksa: situs tanpa entri di
+# SITE_DOMAINS dilewati, dan yang belum punya sertifikat cukup diberi peringatan
+# lalu tetap dilayani lewat HTTP. Setup tidak berhenti karena satu domain.
+ssl: nginx
+	@bash scripts/35-ssl.sh
+
 phpmyadmin: nginx
 	@bash scripts/30-phpmyadmin.sh
 
 # Urutannya penting: MySQL lebih dulu supaya phpMyAdmin punya yang dipantau,
-# nginx sebelum phpMyAdmin karena panel itu disajikan lewat nginx.
-server: preflight docker mysql nginx phpmyadmin
+# nginx sebelum phpMyAdmin karena panel itu disajikan lewat nginx, dan SSL
+# paling akhir karena ia menulis ulang server block yang sudah jadi.
+server: preflight docker mysql nginx phpmyadmin ssl
 	@echo ""
 	@echo "Setup selesai."
 	@echo ""
 	@echo "Langkah berikutnya — dilakukan manual dengan sengaja:"
 	@echo "  1. Ganti password bawaan di .env, lalu jalankan ulang: sudo make mysql"
-	@echo "  2. Isi server_name tiap situs di /etc/nginx/sites-available/"
-	@echo "  3. Pasang SSL:  sudo certbot --nginx -d domain-anda"
+	@echo "  2. Arahkan DNS tiap domain ke IP server ini (proxied di Cloudflare)"
+	@echo "  3. Cloudflare → SSL/TLS → Overview → mode Full (strict)"
 	@echo "  4. Batasi akses phpMyAdmin ke IP Anda (lihat komentar di server block-nya)"
 
 status:
