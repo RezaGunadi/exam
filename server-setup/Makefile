@@ -7,6 +7,7 @@
 #   sudo make server     # seluruh rangkaian
 #   sudo make docker     # Docker Engine + plugin Compose
 #   sudo make mysql      # MySQL + pengguna + database per proyek
+#   sudo make php        # pindahkan seluruh server ke PHP_VERSION di .env
 #   sudo make nginx      # nginx + PHP-FPM + situs + symlink
 #   sudo make ssl        # Origin Certificate Cloudflare + server block 443
 #   sudo make phpmyadmin # panel database (port terpisah + basic auth)
@@ -14,13 +15,14 @@
 
 SHELL := /bin/bash
 
-.PHONY: help server preflight docker mysql nginx cloudflare ssl phpmyadmin status env
+.PHONY: help server preflight docker mysql php nginx cloudflare ssl phpmyadmin status env
 
 help:
 	@echo "Setup server — target yang tersedia:"
 	@echo "  sudo make server       Pasang & konfigurasi semuanya, termasuk HTTPS"
 	@echo "  sudo make docker       Docker Engine + plugin Compose saja"
 	@echo "  sudo make mysql        MySQL saja"
+	@echo "  sudo make php          Pindahkan PHP (CLI, FPM & server block) ke PHP_VERSION di .env"
 	@echo "  sudo make nginx        nginx + situs saja"
 	@echo "  sudo make ssl          HTTPS: Origin Certificate + server block 443"
 	@echo "  sudo make cloudflare   Pulihkan IP asli di belakang proxy Cloudflare"
@@ -46,6 +48,15 @@ docker: preflight
 # terikat ke loopback dan container tidak akan bisa menyambung.
 mysql: docker
 	@bash scripts/10-mysql.sh
+
+# Dijalankan TERPISAH, bukan bagian dari `make server`: memasang versi PHP yang
+# diminta bisa berarti menambahkan repo pihak ketiga (ondrej/sury), dan itu
+# keputusan yang pantas diketik sendiri, bukan efek samping dari setup awal.
+#
+# `make nginx` tetap aman dijalankan lebih dulu — ia memakai PHP bawaan distro
+# selama versi yang diminta belum tersedia, sambil menyebutkan target ini.
+php: preflight
+	@bash scripts/15-php.sh
 
 nginx: preflight
 	@bash scripts/20-nginx.sh

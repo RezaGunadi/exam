@@ -15,7 +15,27 @@ require_root
 require_apt
 
 log "nginx + PHP-FPM"
-apt_install nginx php-fpm php-mysql php-mbstring php-zip php-gd php-curl php-xml
+
+# PHP_VERSION di .env adalah sumber kebenarannya. Paket meta TANPA versi
+# (php-fpm, php-mysql, …) mengikuti bawaan distro — 8.1 di Ubuntu 22.04 — dan
+# itu di bawah syarat minimum Laravel 11. Karena target ini bisa dijalankan
+# sebelum `sudo make php` menambahkan repo yang menyediakannya, ketersediaannya
+# DIPERIKSA lebih dulu: `apt-get install` pada paket tanpa kandidat akan
+# menghentikan seluruh penyiapan situs, padahal PHP bawaan sebenarnya cukup
+# untuk membuat nginx berjalan.
+PHP_PREFIX=php
+if [ -n "${PHP_VERSION:-}" ]; then
+  if php_pkg_available "$PHP_VERSION"; then
+    PHP_PREFIX="php${PHP_VERSION}"
+  else
+    warn "php${PHP_VERSION} belum tersedia di repo — memakai PHP bawaan distro"
+    warn "  Pasang versi yang diminta dengan: sudo make php"
+  fi
+fi
+
+apt_install nginx \
+  "${PHP_PREFIX}-fpm" "${PHP_PREFIX}-mysql" "${PHP_PREFIX}-mbstring" \
+  "${PHP_PREFIX}-zip" "${PHP_PREFIX}-gd" "${PHP_PREFIX}-curl" "${PHP_PREFIX}-xml"
 
 # Socket PHP-FPM baru ADA setelah layanannya berjalan, jadi layanannya
 # dinyalakan lebih dulu. Sebelumnya skrip langsung berhenti bila socket belum

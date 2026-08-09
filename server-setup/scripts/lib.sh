@@ -88,6 +88,43 @@ check_env_vars() {
   warn "  Bagian yang memakainya akan DILEWATI. Tambahkan ke $dir/.env"
 }
 
+# Tambahkan variabel yang belum ada ke .env, lengkap dengan nilai bawaannya.
+#
+#   ensure_env_var <dir> <NAMA> <nilai> [komentar]
+#
+# check_env_vars hanya MEMPERINGATKAN — dan peringatan itu tidak menolong pada
+# server yang sudah berjalan: .env dibuat sekali dari .env.example lalu tidak
+# pernah disentuh lagi, sehingga variabel baru hasil `git pull` tidak pernah
+# sampai ke sana. Skrip lalu membaca nilai kosong dan diam-diam mengambil jalur
+# bawaan yang salah.
+#
+# Hanya untuk variabel yang AMAN diberi nilai bawaan. Password dan kredensial
+# tidak pernah lewat sini — nilai bawaan yang bisa ditebak lebih berbahaya
+# daripada variabel yang hilang.
+ensure_env_var() {
+  local dir="$1" name="$2" value="$3" comment="${4:-}"
+  local file="$dir/.env"
+
+  [ -f "$file" ] || return 0
+  if grep -qE "^[[:space:]]*${name}=" "$file"; then
+    return 0
+  fi
+
+  {
+    echo ""
+    if [ -n "$comment" ]; then
+      echo "# $comment"
+    fi
+    echo "${name}=${value}"
+  } >> "$file"
+
+  # Diekspor juga, bukan hanya ditulis: .env sudah dibaca sebelum ini dipanggil,
+  # jadi tanpa export pemanggilnya masih melihat nilai kosong pada eksekusi yang
+  # sama — dan baru berperilaku benar saat dijalankan untuk kedua kalinya.
+  export "${name}=${value}"
+  ok "${name}=${value} ditambahkan ke .env"
+}
+
 # Ubah "a,b,c" menjadi baris-baris.
 split_csv() {
   echo "$1" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$'
@@ -116,12 +153,36 @@ kv_lookup() {
 # Socket PHP-FPM baru ADA setelah layanannya berjalan. Pencariannya memakai glob
 # shell, bukan `grep -oP`: PCRE tidak selalu tersedia dan gagal pada sebagian
 # locale, dengan pesan yang sama sekali tidak menjelaskan hubungannya dengan PHP.
+#
+# PHP_VERSION di .env didahulukan. Glob-nya mengambil hasil PERTAMA menurut
+# abjad — php8.1 sebelum php8.2 — jadi selama dua versi masih terpasang
+# berdampingan, `make nginx` yang dijalankan ulang setelah `make php` akan
+# diam-diam mengembalikan seluruh situs ke PHP lama. Kegagalannya tidak
+# menimbulkan error apa pun: situsnya tetap terbuka, hanya dengan versi yang
+# salah, dan itu baru ketahuan dari aplikasi yang menolak jalan.
+#
+# Kalau socket versi itu belum ada (mis. `make nginx` dijalankan sebelum
+# `make php`), pencarian jatuh kembali ke glob supaya situs tetap terkonfigurasi
+# dengan PHP yang memang ada, bukan berhenti sama sekali.
 find_php_sock() {
   local candidate
+  if [ -n "${PHP_VERSION:-}" ]; then
+    candidate="/run/php/php${PHP_VERSION}-fpm.sock"
+    [ -S "$candidate" ] && { echo "$candidate"; return 0; }
+  fi
   for candidate in /run/php/php*-fpm.sock; do
     [ -S "$candidate" ] && { echo "$candidate"; return 0; }
   done
   return 1
+}
+
+# Apakah paket php<versi>-<ekstensi> bisa dipasang dari repo yang aktif?
+#
+# Dipakai untuk memutuskan antara paket berversi dan paket meta bawaan distro.
+# `apt-get install` pada paket yang tidak punya kandidat akan menghentikan
+# seluruh skrip — padahal jawabannya cuma "repo-nya belum ditambahkan".
+php_pkg_available() {
+  apt-cache policy "php${1}-fpm" 2>/dev/null | grep -q 'Candidate: [0-9]'
 }
 
 # Cari pasangan sertifikat yang sudah terpasang untuk sebuah domain.

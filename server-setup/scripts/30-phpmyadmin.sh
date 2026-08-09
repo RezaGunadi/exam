@@ -82,14 +82,14 @@ else
   ok "basic-auth dibuat untuk $PMA_AUTH_USER"
 fi
 
-# Socket dicari lewat glob, bukan `grep -oP`. Versi lama menyusun path dari
-# nomor versi hasil regex; bila regex itu gagal, path-nya menjadi
-# "/run/php/php-fpm.sock" yang tidak ada — dan skrip TETAP LANJUT, sehingga
-# phpMyAdmin baru ketahuan rusak saat dibuka (502, tanpa petunjuk apa pun).
-PHP_SOCK=""
-for candidate in /run/php/php*-fpm.sock; do
-  [ -S "$candidate" ] && { PHP_SOCK="$candidate"; break; }
-done
+# Socket dicari lewat find_php_sock (lib.sh), bukan `grep -oP`. Versi lama
+# menyusun path dari nomor versi hasil regex; bila regex itu gagal, path-nya
+# menjadi "/run/php/php-fpm.sock" yang tidak ada — dan skrip TETAP LANJUT,
+# sehingga phpMyAdmin baru ketahuan rusak saat dibuka (502, tanpa petunjuk apa
+# pun). Fungsi bersama itu juga mendahulukan PHP_VERSION dari .env, jadi panel
+# ini memakai PHP yang sama dengan situs lain, bukan versi tertua yang kebetulan
+# masih terpasang.
+PHP_SOCK="$(find_php_sock || true)"
 [ -n "$PHP_SOCK" ] || die "socket PHP-FPM tidak ditemukan — jalankan 'sudo make nginx' lebih dulu"
 PMA_PORT="${PMA_PORT:-8081}"
 

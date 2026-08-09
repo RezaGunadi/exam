@@ -47,6 +47,7 @@ kali dijalankan, dan tidak ikut ke git):
 |---|---|
 | `DB_USER`, `DB_PASSWORD` | Pengguna MySQL untuk semua aplikasi |
 | `DATABASES` | Database yang dibuat, satu per proyek |
+| `PHP_VERSION` | Versi PHP untuk semua situs — dipasang & diaktifkan `sudo make php` |
 | `SITES` | Direktori `/var/www/<nama>` + server block + symlink |
 | `SITE_DOMAINS` | `nama=domain` — mengisi `server_name` dan menentukan situs mana yang dapat HTTPS |
 | `SITE_REPOS` | `nama=url` — situs yang terdaftar akan **diklon dari git** |
@@ -70,6 +71,56 @@ sekali-jalan itu tidak memberi jalur pembaruan: paketnya tidak ikut
 MySQL. Skrip MySQL menentukan alamat yang didengarkan dari ada-tidaknya
 jembatan `docker0`; bila Docker menyusul belakangan, MySQL sudah terlanjur
 terikat ke loopback saja dan container tidak akan pernah bisa menyambung.
+
+## Versi PHP
+
+Paket `php-fpm` tanpa nomor versi selalu mengikuti bawaan distro, dan bawaan
+distro tidak selalu cukup:
+
+| Distro | `php-fpm` → |
+|---|---|
+| Ubuntu 22.04 | **8.1** |
+| Ubuntu 24.04 | 8.3 |
+| Debian 11 | 7.4 |
+| Debian 12 | 8.2 |
+
+Laravel 11 butuh minimal **8.2**, jadi di Ubuntu 22.04 setup ini tidak cukup apa
+adanya. Isi `PHP_VERSION` di `.env` lalu:
+
+```bash
+sudo make php
+```
+
+Satu perintah itu mengerjakan tiga hal yang biasanya dilakukan terpisah — dan
+yang ketiga hampir selalu terlupa:
+
+1. memasang paketnya, menambahkan repo `ondrej` (Ubuntu) atau `sury` (Debian)
+   lebih dulu bila distro belum menyediakan versi tersebut;
+2. menjadikannya `php` di terminal, lewat `update-alternatives`;
+3. **mengarahkan seluruh server block nginx** — termasuk phpMyAdmin — ke socket
+   FPM versi itu, lalu mematikan FPM versi lama.
+
+Langkah 3 yang menentukan versi mana yang benar-benar melayani pengunjung.
+Tanpa itu `php -v` menjawab 8.2 dengan meyakinkan sementara setiap halaman web
+masih dijalankan 8.1 — selisih yang tidak menimbulkan satu pun pesan error.
+
+`PHP_VERSION` yang belum ada di `.env` **ditambahkan otomatis** saat target ini
+dijalankan. `.env` dibuat sekali lalu tidak pernah disentuh lagi, sehingga
+variabel baru hasil `git pull` tidak akan pernah sampai ke server yang sudah
+berjalan; peringatan saja tidak cukup untuk itu.
+
+Target ini **sengaja tidak masuk `make server`**: memasang versi yang diminta
+bisa berarti menambahkan repo pihak ketiga, dan itu pantas diketik sendiri.
+`make nginx` yang dijalankan lebih dulu tetap aman — ia memakai PHP bawaan
+distro selama versi yang diminta belum tersedia, sambil menyebutkan `make php`.
+
+Paket versi lama hanya **dimatikan, tidak dihapus** — `apt purge php8.1-*` bisa
+ikut mencabut paket meta beserta apa pun yang bergantung padanya. Setelah semua
+situs terbukti sehat, buang sendiri:
+
+```bash
+sudo apt purge 'php8.1-*' && sudo apt autoremove
+```
 
 ## HTTPS
 
