@@ -45,6 +45,45 @@ Karena itu `exam_v1` **tidak boleh** didaftarkan di `SITES` maupun
 Konsekuensinya, HTTPS untuk domain ini juga diurus di sini (`make ssl`), bukan
 oleh `make ssl` induk.
 
+## Database: `migrate` mati secara bawaan
+
+Exam v1 memakai database yang **sudah terisi**, dipakai bersama Exam v2 dan
+berasal dari restore — bukan dibangun dari nol. Karena itu `MIGRATE=no` adalah
+bawaannya, dan `make app`/`make update` tidak menyentuh skema sama sekali.
+
+Bukan cuma mubazir. Riwayat migrasi repo aplikasi memuat **empat berkas yang
+urutannya salah**: merujuk kolom atau tabel yang baru dibuat migrasi bertanggal
+lebih akhir. Di database produksi ini tidak pernah terasa karena ke-104 migrasi
+tidak pernah dijalankan berurutan dari kosong; di database baru, `migrate`
+berhenti di tengah dan meninggalkan skema separuh jalan.
+
+| Migrasi | Merujuk | Baru dibuat di |
+|---|---|---|
+| `2025_01_16_000001_add_qr_to_users_table` | kolom `token` | `2025_10_26_214958_add_token_to_users_table` |
+| `2025_01_16_000002_create_user_absents_table` | tabel `schools` | `2025_08_28_052830_create_schools_table` |
+| `2025_01_16_000003_create_school_absents_table` | tabel `schools` | sama |
+| `2025_01_17_000002_add_signature_image_to_schools_table` | tabel `schools` | sama |
+
+Perbaikannya ada di repo aplikasi (ganti nama berkas agar urutannya benar),
+bukan di skrip deploy ini. Selama itu belum dikerjakan, environment baru mana
+pun — staging, lokal — akan menabrak hal yang sama.
+
+Untuk database yang memang kosong dan memang ingin dibangun dari nol:
+
+```bash
+sudo make app MIGRATE=yes
+```
+
+**Pengaman salah database.** Dengan migrasi mati, `DB_NAME` yang salah ketik
+akan menghasilkan situs yang terbuka normal lalu gagal pada permintaan pertama
+yang menyentuh data, tanpa menyebut sebabnya. Karena itu skrip menolak lanjut
+bila database yang ditunjuk tidak ada atau ada tetapi kosong, dan mencetak
+daftar database yang benar-benar ada di server:
+
+```bash
+sudo make app DB_NAME=nama_yang_benar
+```
+
 ## Yang sengaja TIDAK dilakukan
 
 **`php artisan config:cache`.** Ini langkah baku deploy Laravel, dan di aplikasi

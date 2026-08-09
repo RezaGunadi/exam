@@ -35,7 +35,19 @@ DB_NAME ?= exam_admin_system
 # $$USER tidak dipakai: di dalam `sudo make` nilainya sudah root.
 DEPLOY_USER ?=
 
-export SITE DOMAIN REPO DB_NAME DEPLOY_USER
+# Jalankan `php artisan migrate`? BAWAANNYA TIDAK.
+#
+# Database Exam v1 dipakai bersama Exam v2 dan sudah terisi dari restore, bukan
+# dibangun dari nol. Selain mubazir, riwayat migrasi repo aplikasi memuat
+# beberapa berkas yang urutannya salah — merujuk kolom/tabel yang baru dibuat
+# migrasi bertanggal lebih akhir — sehingga `migrate` berhenti di tengah dan
+# meninggalkan skema separuh jalan.
+#
+# Nyalakan hanya untuk database kosong yang memang ingin dibangun dari nol:
+#   sudo make app MIGRATE=yes
+MIGRATE ?= no
+
+export SITE DOMAIN REPO DB_NAME DEPLOY_USER MIGRATE
 
 .PHONY: help deploy app site ssl cron update permissions
 
@@ -52,7 +64,7 @@ help:
 	@echo ""
 	@echo "Situs   : $(SITE)  (/var/www/$(SITE))"
 	@echo "Repo    : $(REPO)"
-	@echo "Database: $(DB_NAME)"
+	@echo "Database: $(DB_NAME)  (migrate=$(MIGRATE))"
 	@echo ""
 	@echo "Butuh MySQL & nginx dari direktori induk lebih dulu: sudo make server"
 
@@ -85,6 +97,8 @@ permissions:
 deploy: app site ssl cron
 	@echo ""
 	@echo "Deploy selesai — PERIKSA, jangan berhenti di baris ini:"
+	@echo "  0. Skema database TIDAK disentuh (MIGRATE=$(MIGRATE)) — pastikan"
+	@echo "     $(DB_NAME) memang database yang dipakai Exam v2"
 	@echo "  1. Buka https://$(DOMAIN) dan pastikan halamannya tampil"
 	@echo "  2. Isi kredensial R2 & AWS di /var/www/$(SITE)/.env bila unggahan dipakai"
 	@echo "  3. Pastikan penjadwal jalan: grep CRON /var/log/syslog | tail"

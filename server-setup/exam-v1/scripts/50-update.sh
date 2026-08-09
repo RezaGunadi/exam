@@ -45,8 +45,17 @@ log "composer install"
 # umask root — bukan izin yang dipasang deploy sebelumnya.
 bash "$SCRIPT_DIR/permissions.sh"
 
-log "migrasi"
-artisan migrate --force || die "migrasi gagal"
+# Migrasi dimatikan secara bawaan — lihat alasan panjangnya di 10-app.sh.
+# Database ini dipakai bersama Exam v2; skema diubah dari sana, bukan dari sini.
+case "${MIGRATE:-no}" in
+  [Yy][Ee][Ss]|[Tt][Rr][Uu][Ee]|1)
+    log "migrasi"
+    artisan migrate --force || die "migrasi gagal"
+    ;;
+  *)
+    skip "migrasi (MIGRATE=${MIGRATE:-no})"
+    ;;
+esac
 
 # Lihat komentar panjang di 10-app.sh: config:cache MERUSAK aplikasi ini
 # (38 pemanggilan env() di luar config/), dan route:cache gagal karena ada

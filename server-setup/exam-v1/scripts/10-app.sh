@@ -123,22 +123,65 @@ log "composer install"
 ok "dependensi terpasang"
 
 # ── Database ───────────────────────────────────────────────────────────────
-# Dibuat dengan kredensial DB_USER dari .env induk, yang memang diberi seluruh
-# hak untuk keperluan ini. Bila gagal, database ditambahkan lewat setup induk —
-# bukan dengan menebak password root di sini.
-if [ -z "${DB_USER:-}" ]; then
-  warn "DB_USER kosong di $SETUP_DIR/.env — pembuatan database dilewati"
-elif mysql -u"$DB_USER" -p"${DB_PASSWORD:-}" -e "USE \`${APP_DB}\`" >/dev/null 2>&1; then
-  skip "database $APP_DB"
-elif mysql -u"$DB_USER" -p"${DB_PASSWORD:-}" \
-       -e "CREATE DATABASE \`${APP_DB}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" \
-       >/dev/null 2>&1; then
+# MIGRATE=no ADALAH BAWAANNYA, dan itu keputusan sadar.
+#
+# Exam v1 memakai database yang sudah terisi — dipakai bersama Exam v2, hasil
+# restore, bukan hasil `migrate` dari kosong. Menjalankan migrasi di atasnya
+# bukan sekadar mubazir: riwayat migrasi repo ini memuat beberapa berkas yang
+# urutannya salah (mis. 2025_01_16_000001_add_qr_to_users_table memakai
+# after('token'), sedangkan kolom itu baru dibuat 2025_10_26), sehingga
+# menjalankannya berhenti di tengah — dan "berhenti di tengah" pada perubahan
+# skema berarti database tinggal separuh jalan.
+#
+# Nyalakan hanya untuk database yang memang kosong dan memang ingin dibangun
+# dari nol: sudo make app MIGRATE=yes
+# Dinormalkan ke huruf kecil lebih dulu. Tanpa itu `MIGRATE=YES` jatuh ke
+# cabang "lewati" — arah yang aman, tetapi diam-diam mengabaikan apa yang
+# jelas-jelas diketik orangnya.
+case "${MIGRATE:-no}" in
+  [Yy][Ee][Ss]|[Tt][Rr][Uu][Ee]|1) DO_MIGRATE=1 ;;
+  *)                               DO_MIGRATE=0 ;;
+esac
+
+db_query() { mysql -u"$DB_USER" -p"${DB_PASSWORD:-}" -N -B -e "$1" 2>/dev/null; }
+
+[ -n "${DB_USER:-}" ] || die "DB_USER kosong di $SETUP_DIR/.env"
+
+if mysql -u"$DB_USER" -p"${DB_PASSWORD:-}" -e "USE \`${APP_DB}\`" >/dev/null 2>&1; then
+  TABLES="$(db_query "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${APP_DB}';" || echo 0)"
+  ok "database $APP_DB (${TABLES:-0} tabel)"
+
+  # Database yang ada TETAPI kosong, sementara migrasi dimatikan, hampir selalu
+  # berarti DB_NAME menunjuk ke tempat yang salah. Dibiarkan lewat, hasilnya
+  # situs yang terbuka normal lalu gagal pada permintaan pertama yang menyentuh
+  # data — dan penyebabnya tidak disebut di mana pun.
+  if [ "$DO_MIGRATE" -eq 0 ] && [ "${TABLES:-0}" -eq 0 ]; then
+    warn "database '$APP_DB' ada tetapi KOSONG, sementara migrasi dimatikan."
+    warn "  Database yang ada di server ini:"
+    db_query "SHOW DATABASES;" | grep -vE '^(information_schema|mysql|performance_schema|sys)$' | sed 's/^/       /'
+    warn "  Tunjuk yang benar:  sudo make app DB_NAME=nama_database"
+    warn "  Atau bangun dari nol: sudo make app MIGRATE=yes"
+    die "menolak melanjutkan ke database kosong"
+  fi
+elif [ "$DO_MIGRATE" -eq 1 ]; then
+  mysql -u"$DB_USER" -p"${DB_PASSWORD:-}" \
+    -e "CREATE DATABASE \`${APP_DB}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" \
+    >/dev/null 2>&1 || {
+      warn "tidak bisa membuat database $APP_DB dengan pengguna $DB_USER"
+      warn "  Tambahkan '${APP_DB}' ke DATABASES di $SETUP_DIR/.env lalu:"
+      warn "    cd $SETUP_DIR && sudo make mysql"
+      die "database belum siap"
+    }
   ok "database $APP_DB dibuat"
 else
-  warn "tidak bisa membuat database $APP_DB dengan pengguna $DB_USER"
-  warn "  Tambahkan '${APP_DB}' ke DATABASES di $SETUP_DIR/.env lalu:"
-  warn "    cd $SETUP_DIR && sudo make mysql"
-  die "database belum siap — migrasi tidak dijalankan"
+  # Tidak dibuat diam-diam. Dengan migrasi dimatikan, database kosong yang baru
+  # dibuat tidak akan pernah terisi apa pun.
+  warn "database '$APP_DB' tidak ada, dan migrasi dimatikan."
+  warn "  Database yang ada di server ini:"
+  db_query "SHOW DATABASES;" | grep -vE '^(information_schema|mysql|performance_schema|sys)$' | sed 's/^/       /'
+  warn "  Tunjuk yang benar:  sudo make app DB_NAME=nama_database"
+  warn "  Atau bangun dari nol: sudo make app MIGRATE=yes"
+  die "database tidak ditemukan"
 fi
 
 # ── Izin ───────────────────────────────────────────────────────────────────
@@ -208,10 +251,20 @@ chmod 664 "$APP_WEBROOT/sitemap.xml"
 ok "public/sitemap.xml bisa ditulis penjadwal"
 
 # ── Migrasi ────────────────────────────────────────────────────────────────
-# --force karena tidak ada TTY untuk menjawab konfirmasi produksi.
-log "menjalankan migrasi"
-artisan migrate --force || die "migrasi gagal — periksa kredensial database di $APP_ENV_FILE"
-ok "migrasi selesai"
+if [ "$DO_MIGRATE" -eq 1 ]; then
+  # --force karena tidak ada TTY untuk menjawab konfirmasi produksi.
+  log "menjalankan migrasi"
+  artisan migrate --force || {
+    warn "Kegagalan migrasi pada database KOSONG biasanya bukan soal kredensial."
+    warn "  Riwayat migrasi repo ini memuat berkas yang urutannya salah — merujuk"
+    warn "  kolom atau tabel yang baru dibuat migrasi bertanggal lebih akhir."
+    warn "  Perbaikannya ada di repo aplikasi, bukan di skrip deploy ini."
+    die "migrasi gagal"
+  }
+  ok "migrasi selesai"
+else
+  skip "migrasi (MIGRATE=no — database dipakai bersama Exam v2 dan sudah terisi)"
+fi
 
 # ── Cache konfigurasi: SENGAJA TIDAK DIJALANKAN ────────────────────────────
 # `php artisan config:cache` adalah langkah baku deploy Laravel, dan di aplikasi
