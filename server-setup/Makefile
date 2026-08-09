@@ -70,7 +70,11 @@ phpmyadmin: nginx
 # paling akhir karena ia menulis ulang server block yang sudah jadi.
 server: preflight docker mysql nginx phpmyadmin ssl
 	@echo ""
-	@echo "Setup selesai."
+	@echo "Setup selesai — PERIKSA hasilnya, jangan berhenti di baris ini:"
+	@echo ""
+	@bash scripts/status.sh | sed -n '/Situs aktif:/,/^$$/p'
+	@echo "Situs yang masih 'http saja' TIDAK akan terbuka bila mode SSL"
+	@echo "Cloudflare sudah Full/Full (strict) — pengunjung menerima 521."
 	@echo ""
 	@echo "Langkah berikutnya — dilakukan manual dengan sengaja:"
 	@echo "  1. Ganti password bawaan di .env, lalu jalankan ulang: sudo make mysql"

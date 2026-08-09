@@ -32,8 +32,23 @@ CERT_DIR=/etc/ssl/cloudflare
 LOCAL_CERTS="$ROOT_DIR/certs"
 
 if [ -z "${SITE_DOMAINS:-}" ]; then
-  warn "SITE_DOMAINS kosong — tidak ada situs yang dipasangi HTTPS"
-  echo "  Isi di .env, mis: SITE_DOMAINS=exam_kelas_privat_v2=exam.kelasprivat.id"
+  # Ditulis mencolok, bukan satu baris yang hanyut di antara ratusan baris
+  # keluaran lain. Situs yang tetap HTTP-only sementara mode SSL Cloudflare
+  # sudah dinaikkan menghasilkan error 521 — dan penyebabnya persis di sini,
+  # beberapa menit sebelumnya, tanpa ada yang sempat menyadarinya.
+  echo ""
+  warn "═══════════════════════════════════════════════════════════"
+  warn "  HTTPS TIDAK DIPASANG — SITE_DOMAINS kosong di .env"
+  warn ""
+  warn "  Tidak ada satu pun situs yang akan mendengarkan di port 443."
+  warn "  Bila mode SSL Cloudflare sudah Full/Full (strict), pengunjung"
+  warn "  menerima error 521 sampai baris ini diisi."
+  warn ""
+  warn "  Tambahkan ke .env lalu: sudo make ssl"
+  warn "    SITE_DOMAINS=exam_v2=exam.kelasprivat.id"
+  warn "    CF_ORIGIN_CA_KEY=v1.0-..."
+  warn "═══════════════════════════════════════════════════════════"
+  echo ""
   exit 0
 fi
 

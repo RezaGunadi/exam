@@ -64,6 +64,28 @@ load_env() {
   # shellcheck disable=SC1090
   . "$dir/.env"
   set +a
+  check_env_vars "$dir"
+}
+
+# Peringatkan bila .env ketinggalan variabel yang sudah ada di .env.example.
+#
+# .env dibuat SEKALI lalu tidak pernah disentuh lagi — `git pull` memperbarui
+# .env.example, tetapi variabel barunya tidak muncul di .env yang sudah ada.
+# Skrip lalu membaca nilai kosong dan melewati pekerjaannya tanpa keluhan.
+#
+# Ini bukan kemungkinan teoretis: SITE_DOMAINS yang tidak ada membuat SELURUH
+# tahap HTTPS dilewati, sementara `make server` tetap mencetak "Setup selesai"
+# — dan situsnya baru ketahuan mati dari halaman error Cloudflare.
+check_env_vars() {
+  local dir="$1" missing=() name
+  [ -f "$dir/.env.example" ] || return 0
+  while read -r name; do
+    grep -qE "^[[:space:]]*${name}=" "$dir/.env" || missing+=("$name")
+  done < <(grep -oE '^[A-Z_][A-Z0-9_]*=' "$dir/.env.example" | tr -d '=')
+  [ ${#missing[@]} -eq 0 ] && return 0
+  warn ".env ketinggalan ${#missing[@]} variabel yang sudah ada di .env.example:"
+  printf '       %s\n' "${missing[@]}"
+  warn "  Bagian yang memakainya akan DILEWATI. Tambahkan ke $dir/.env"
 }
 
 # Ubah "a,b,c" menjadi baris-baris.
