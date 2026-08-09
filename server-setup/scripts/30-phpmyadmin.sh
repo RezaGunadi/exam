@@ -52,7 +52,7 @@ PMA_CONF="$PMA_DIR/config.inc.php"
 if [ -f "$PMA_CONF" ]; then
   skip "config.inc.php"
 else
-  SECRET="$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)"
+  SECRET="$(openssl rand -base64 48 | tr -d '/+=' | cut -c1-32)"
   cat > "$PMA_CONF" <<CONF
 <?php
 declare(strict_types=1);

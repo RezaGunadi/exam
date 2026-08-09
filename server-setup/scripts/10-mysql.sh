@@ -25,8 +25,12 @@ if [ -z "${MYSQL_ROOT_PASSWORD:-}" ]; then
   if [ -f "$ROOT_PW_FILE" ]; then
     MYSQL_ROOT_PASSWORD="$(cat "$ROOT_PW_FILE")"
   else
+    # `cut -c1-24`, bukan `head -c 24`: head menutup pipa setelah cukup byte,
+    # membuat perintah sebelumnya menerima SIGPIPE. Dengan `pipefail` itu
+    # dianggap kegagalan pipeline dan menghentikan seluruh skrip — kegagalan
+    # yang muncul acak dan sangat sulit ditelusuri.
     # Password acak lebih baik daripada nilai bawaan yang bisa ditebak.
-    MYSQL_ROOT_PASSWORD="$(openssl rand -base64 24 | tr -d '/+=' | head -c 24)"
+    MYSQL_ROOT_PASSWORD="$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)"
     umask 077
     printf '%s' "$MYSQL_ROOT_PASSWORD" > "$ROOT_PW_FILE"
     chmod 600 "$ROOT_PW_FILE"
@@ -69,11 +73,21 @@ ok "pengguna anonim & database test dibersihkan"
 # Jadi alamat gateway Docker ikut didengarkan bila jembatannya ada.
 BIND_CONF=/etc/mysql/mysql.conf.d/zz-bind-address.cnf
 
+# CATATAN PENTING: skrip ini berjalan dengan `set -euo pipefail` (lib.sh).
+# Artinya SATU perintah gagal di dalam pipeline akan menghentikan SELURUH
+# skrip — termasuk saat kegagalan itu wajar dan sudah diantisipasi.
+#
+# `ip ... docker0` memang gagal bila Docker belum terpasang, dan `grep` memang
+# gagal bila berkasnya belum ada. Keduanya keadaan normal pada pemasangan
+# pertama. Tanpa `|| true`, MySQL selesai terpasang dengan benar tetapi `make`
+# tetap melaporkan gagal — persis gejala yang membingungkan: layanan berjalan,
+# tetapi langkah berikutnya tidak pernah dijalankan.
 detect_docker_gateway() {
-  ip -4 -o addr show docker0 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1
+  command -v ip >/dev/null 2>&1 || return 0
+  ip -4 -o addr show docker0 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1 || true
 }
 
-DOCKER_GW="$(detect_docker_gateway)"
+DOCKER_GW="$(detect_docker_gateway || true)"
 if [ -n "$DOCKER_GW" ]; then
   BIND_LIST="127.0.0.1,${DOCKER_GW}"
 else
@@ -82,7 +96,10 @@ fi
 
 # Tulis ulang bila daftar alamatnya berubah — mis. Docker baru dipasang setelah
 # MySQL. Tanpa ini, menjalankan ulang setelah memasang Docker tidak berefek.
-CURRENT_BIND="$(grep -oP '^bind-address\s*=\s*\K.*' "$BIND_CONF" 2>/dev/null | tr -d ' ')"
+# sed dipakai, bukan `grep -oP`: PCRE tidak selalu tersedia dan gagal pada
+# sebagian locale. `|| true` menjaga agar berkas yang belum ada tidak
+# menghentikan skrip.
+CURRENT_BIND="$(sed -n 's/^bind-address[[:space:]]*=[[:space:]]*//p' "$BIND_CONF" 2>/dev/null | tr -d ' ' | head -1 || true)"
 if [ "$CURRENT_BIND" = "$BIND_LIST" ]; then
   skip "bind-address ${BIND_LIST}"
 else
