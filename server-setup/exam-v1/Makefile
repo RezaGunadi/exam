@@ -30,9 +30,14 @@ SITE    ?= exam_v1
 DOMAIN  ?= ujian.kelasprivat.id
 REPO    ?= https://github.com/RezaGunadi/exam_kelas_privat.git
 DB_NAME ?= exam_admin_system
-export SITE DOMAIN REPO DB_NAME
 
-.PHONY: help deploy app site ssl cron update
+# Pemilik berkas aplikasi. Kosong = pengguna yang mengetik sudo (SUDO_USER).
+# $$USER tidak dipakai: di dalam `sudo make` nilainya sudah root.
+DEPLOY_USER ?=
+
+export SITE DOMAIN REPO DB_NAME DEPLOY_USER
+
+.PHONY: help deploy app site ssl cron update permissions
 
 help:
 	@echo "Deploy Exam v1 — $(DOMAIN)"
@@ -42,7 +47,8 @@ help:
 	@echo "  sudo make site     Server block nginx saja"
 	@echo "  sudo make ssl      Sertifikat Let's Encrypt + blok 443"
 	@echo "  sudo make cron     Penjadwal Laravel (schedule:run tiap menit)"
-	@echo "  sudo make update   Rilis berikutnya: git pull + composer + migrasi"
+	@echo "  sudo make update      Rilis berikutnya: git pull + composer + migrasi"
+	@echo "  sudo make permissions Pasang ulang izin berkas Laravel"
 	@echo ""
 	@echo "Situs   : $(SITE)  (/var/www/$(SITE))"
 	@echo "Repo    : $(REPO)"
@@ -66,6 +72,12 @@ cron:
 
 update:
 	@bash scripts/50-update.sh
+
+# Ikut dijalankan `make app` dan `make update`; berdiri sendiri untuk saat izin
+# rusak di luar deploy — misalnya setelah menyalin berkas ke server dengan scp,
+# atau setelah menyunting kode langsung di sana sebagai root.
+permissions:
+	@bash scripts/permissions.sh
 
 # Urutannya penting: kode lebih dulu (nginx menunjuk ke public/ yang baru ada
 # setelah klon), lalu HTTPS (butuh server block port 80), penjadwal terakhir

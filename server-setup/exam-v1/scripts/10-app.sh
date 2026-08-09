@@ -54,13 +54,9 @@ else
 fi
 
 # ── Kode ───────────────────────────────────────────────────────────────────
-# Kodenya TIDAK dijadikan milik www-data, hanya bisa dibaca olehnya.
-#
-# Dua alasan. Pertama, aplikasi yang berhasil ditembus lewat unggahan tidak bisa
-# menulis ulang kodenya sendiri. Kedua, `sudo git -C ... pull` menolak repo milik
-# www-data dengan "detected dubious ownership" — git membandingkan pemilik repo
-# dengan SUDO_UID, dan www-data tidak akan pernah cocok. Hanya storage/ dan
-# bootstrap/cache yang benar-benar perlu ditulis PHP.
+# Diklon sebagai root; kepemilikan dan izinnya diatur belakangan oleh
+# permissions.sh — pemilik SUDO_USER, grup www-data. Lihat berkas itu untuk apa
+# yang dibeli dan apa yang dibayar oleh pilihan tersebut.
 if [ -d "$APP_ROOT/.git" ]; then
   skip "klon $APP_SITE (perbarui dengan: sudo make update)"
 else
@@ -112,7 +108,9 @@ else
 fi
 
 # Dibaca PHP-FPM sebagai www-data, tidak perlu bisa dibaca siapa pun selain itu.
-chown root:www-data "$APP_ENV_FILE"
+# permissions.sh mempertahankan mode ini; ia satu-satunya berkas yang
+# dikecualikan dari sapuan `chmod 664`.
+chgrp www-data "$APP_ENV_FILE"
 chmod 640 "$APP_ENV_FILE"
 
 # ── Dependensi ─────────────────────────────────────────────────────────────
@@ -144,11 +142,10 @@ else
 fi
 
 # ── Izin ───────────────────────────────────────────────────────────────────
-# Dilakukan SEBELUM artisan dijalankan: perintah pertama yang menulis log akan
-# gagal bila storage/ belum bisa ditulis www-data.
-chown -R www-data:www-data "$APP_ROOT/storage" "$APP_ROOT/bootstrap/cache"
-chmod -R u+rwX,g+rwX "$APP_ROOT/storage" "$APP_ROOT/bootstrap/cache"
-ok "izin storage/ & bootstrap/cache"
+# Dilakukan SETELAH composer install dan SEBELUM artisan dijalankan. Urutannya
+# bukan kebetulan: vendor/ yang baru dipasang ikut disapu, dan perintah artisan
+# pertama yang menulis log akan gagal bila storage/ belum bisa ditulis.
+bash "$SCRIPT_DIR/permissions.sh"
 
 # ── APP_KEY ────────────────────────────────────────────────────────────────
 # Dibuat dengan openssl, BUKAN `php artisan key:generate`.
@@ -156,10 +153,10 @@ ok "izin storage/ & bootstrap/cache"
 # Dua alasan, dan keduanya nyata di sini:
 #
 #   1. key:generate bekerja dengan MENULIS BALIK ke .env. Berkas itu sengaja
-#      dibiarkan 640 root:www-data — aplikasi boleh membacanya, tidak boleh
-#      mengubahnya — sedangkan artisan berjalan sebagai www-data. Perintahnya
-#      gagal, dan memberi www-data hak tulis atas .env demi satu langkah setup
-#      adalah harga yang salah untuk dibayar.
+#      dibiarkan 640 dengan grup www-data — aplikasi boleh membacanya, tidak
+#      boleh mengubahnya — sedangkan artisan berjalan sebagai www-data.
+#      Perintahnya gagal, dan memberi www-data hak tulis atas .env demi satu
+#      langkah setup adalah harga yang salah untuk dibayar.
 #
 #   2. Ayam-dan-telur: sebagian aplikasi tidak bisa boot sama sekali tanpa
 #      APP_KEY ("No application encryption key has been specified"), sehingga
@@ -172,7 +169,7 @@ ok "izin storage/ & bootstrap/cache"
 apt_install openssl
 if [ -z "$(get_env_kv "$APP_ENV_FILE" APP_KEY || true)" ]; then
   set_env_kv "$APP_ENV_FILE" APP_KEY "base64:$(openssl rand -base64 32)"
-  chown root:www-data "$APP_ENV_FILE"
+  chgrp www-data "$APP_ENV_FILE"
   chmod 640 "$APP_ENV_FILE"
   ok "APP_KEY dibuat"
 else
@@ -180,9 +177,9 @@ else
 fi
 
 # ── Symlink storage ────────────────────────────────────────────────────────
-# Dibuat langsung, bukan lewat `artisan storage:link`. Perintah itu membuat
-# berkas DI DALAM public/, yang dimiliki root — dan artisan berjalan sebagai
-# www-data. Symlink-nya sendiri tidak butuh apa pun selain satu panggilan ln.
+# Dibuat langsung dengan ln, bukan lewat `artisan storage:link`. Satu perintah,
+# tanpa mem-boot seluruh aplikasi, dan tetap bekerja pada urutan mana pun izin
+# dipasang — termasuk bila skrip ini dijalankan sebelum permissions.sh.
 if [ -L "$APP_WEBROOT/storage" ]; then
   skip "symlink public/storage"
 elif [ -e "$APP_WEBROOT/storage" ]; then
@@ -193,18 +190,20 @@ else
 fi
 
 # ── Berkas di public/ yang ditulis aplikasi ────────────────────────────────
-# public/ dimiliki root supaya aplikasi tidak bisa menaruh berkas baru di
-# direktori yang disajikan web. Tetapi penjadwal harian menjalankan
-# `sitemap:generate`, yang menulis public/sitemap.xml lewat file_put_contents.
+# Penjadwal harian menjalankan `sitemap:generate`, yang menulis
+# public/sitemap.xml lewat file_put_contents. Berkas itu tidak ikut ke klon
+# (.gitignore), jadi perintahnya harus MEMBUATNYA — dan membuat berkas baru
+# butuh izin atas direktorinya, bukan cuma atas berkasnya.
 #
-# Berkasnya dibuat lebih dulu dan diberikan ke www-data. Menulis ulang berkas
-# yang SUDAH ADA hanya butuh izin atas berkas itu, bukan atas direktorinya —
-# jadi sitemap tetap bisa diperbarui tanpa membuka public/ untuk penulisan.
+# Dengan izin 775 dari permissions.sh, www-data memang boleh menulis di public/.
+# Berkasnya tetap disiapkan di sini supaya langkah ini tidak diam-diam ikut
+# rusak kalau suatu saat public/ dirapatkan lagi — menulis ulang berkas yang
+# SUDAH ADA hanya butuh izin atas berkas itu sendiri.
 #
 # Tanpa ini perintahnya gagal tiap hari, dan satu-satunya jejaknya ada di
 # /var/log/exam_v1-schedule.log yang tidak ada yang membaca.
 [ -f "$APP_WEBROOT/sitemap.xml" ] || : > "$APP_WEBROOT/sitemap.xml"
-chown www-data:www-data "$APP_WEBROOT/sitemap.xml"
+chgrp www-data "$APP_WEBROOT/sitemap.xml"
 chmod 664 "$APP_WEBROOT/sitemap.xml"
 ok "public/sitemap.xml bisa ditulis penjadwal"
 
@@ -229,9 +228,11 @@ ok "migrasi selesai"
 artisan config:clear >/dev/null 2>&1 || true
 artisan view:clear   >/dev/null 2>&1 || true
 
-# Cache yang dibuat artisan barusan bisa jadi milik root bila skrip ini
-# dijalankan ulang dalam keadaan aneh. Dikembalikan, sekali lagi, dengan murah.
-chown -R www-data:www-data "$APP_ROOT/storage" "$APP_ROOT/bootstrap/cache"
+# Berkas cache yang baru dibuat artisan mewarisi umask, bukan izin direktorinya.
+# Dikembalikan pada dua direktori itu saja — murah, dan tidak perlu menyapu
+# vendor/ untuk kedua kalinya.
+chgrp -R www-data "$APP_ROOT/storage" "$APP_ROOT/bootstrap/cache"
+chmod -R ug+rwX "$APP_ROOT/storage" "$APP_ROOT/bootstrap/cache"
 
 ok "kode Exam v1 siap di $APP_ROOT"
 

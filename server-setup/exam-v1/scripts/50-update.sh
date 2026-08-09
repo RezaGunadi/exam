@@ -40,9 +40,10 @@ log "composer install"
     --no-dev --optimize-autoloader --no-interaction --no-progress ) \
   || die "composer install gagal"
 
-# Izin dikembalikan SEBELUM artisan dijalankan: composer bisa menyentuh
-# bootstrap/cache sebagai root, dan artisan berikutnya berjalan sebagai www-data.
-chown -R www-data:www-data "$APP_ROOT/storage" "$APP_ROOT/bootstrap/cache"
+# Izin dikembalikan SEBELUM artisan dijalankan. Berkas yang baru masuk lewat
+# `git pull` dan paket yang baru dipasang composer dimiliki root dan mengikuti
+# umask root — bukan izin yang dipasang deploy sebelumnya.
+bash "$SCRIPT_DIR/permissions.sh"
 
 log "migrasi"
 artisan migrate --force || die "migrasi gagal"
@@ -52,7 +53,8 @@ artisan migrate --force || die "migrasi gagal"
 # closure sebagai aksi route. Yang dilakukan hanya MEMBERSIHKAN cache lama.
 artisan config:clear >/dev/null 2>&1 || true
 artisan view:clear   >/dev/null 2>&1 || true
-chown -R www-data:www-data "$APP_ROOT/storage" "$APP_ROOT/bootstrap/cache"
+chgrp -R www-data "$APP_ROOT/storage" "$APP_ROOT/bootstrap/cache"
+chmod -R ug+rwX "$APP_ROOT/storage" "$APP_ROOT/bootstrap/cache"
 
 # OPcache menyimpan bytecode PHP di memori proses FPM. Tanpa reload, kode lama
 # tetap dijalankan meski berkasnya sudah berganti — dan yang membingungkan,

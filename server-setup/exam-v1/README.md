@@ -20,6 +20,7 @@ aplikasi tidak pernah ditulis ulang setelah dibuat.
 | `sudo make ssl` | Sertifikat Let's Encrypt + blok 443 |
 | `sudo make cron` | Penjadwal Laravel (`schedule:run` tiap menit) |
 | `sudo make update` | Rilis berikutnya: `git pull` + composer + migrasi |
+| `sudo make permissions` | Pasang ulang izin berkas Laravel |
 
 Nilai bawaan bisa ditimpa dari baris perintah:
 
@@ -79,14 +80,44 @@ Lognya dirotasi mingguan. Tanpa itu, entri tiap menit membesar diam-diam sampai
 partisi penuh — dan partisi penuh mematikan MySQL beserta seluruh situs lain di
 server ini, bukan hanya yang ini.
 
-## Kepemilikan berkas
+## Izin berkas
 
-Kode dimiliki `root` dan hanya **dibaca** `www-data`; yang dimiliki `www-data`
-hanya `storage/` dan `bootstrap/cache`. Dua alasan:
+`make app` dan `make update` memanggil `scripts/permissions.sh`, yang menerapkan
+resep izin Laravel yang lazim dipakai:
 
-1. Aplikasi yang ditembus lewat unggahan tidak bisa menulis ulang kodenya sendiri.
-2. `sudo git -C … pull` menolak repo milik `www-data` dengan *detected dubious
-   ownership* — git membandingkan pemilik repo dengan `SUDO_UID`.
+```bash
+chown -R $USER:www-data .
+find . -type f -exec chmod 664 {} \;
+find . -type d -exec chmod 775 {} \;
+chgrp -R www-data storage bootstrap/cache
+chmod -R ug+rwx storage bootstrap/cache
+```
+
+Pemiliknya `SUDO_USER` — pengguna yang mengetik `sudo`, bukan `$USER` yang di
+dalam `sudo make` sudah bernilai `root`. Timpa dengan
+`sudo make permissions DEPLOY_USER=nama`.
+
+**Yang dibayar.** Direktori `775` dengan grup `www-data` berarti PHP boleh
+membuat berkas baru di seluruh pohon aplikasi, termasuk `public/` yang
+menjalankan `.php`. Satu celah pada unggahan berubah dari "penyerang menaruh
+berkas" menjadi eksekusi kode jarak jauh. Aplikasi ini memakai
+`FILESYSTEM_DISK=r2`, jadi unggahan seharusnya tidak pernah mendarat di
+`public/` — jaga agar tetap begitu.
+
+Tiga hal yang tidak ada di resep aslinya, dan ditambahkan karena tanpanya ada
+yang rusak:
+
+- **`.env` tetap `640`.** `chmod 664` membuatnya terbaca semua pengguna di
+  server, sementara isinya password database, `APP_KEY`, dan kredensial SMTP.
+- **`vendor/bin/*` dan `artisan` dikembalikan `775`.** `chmod 664` mencabut bit
+  executable dari semua berkas; kegagalannya muncul kemudian sebagai
+  *Permission denied* pada nama paket, tanpa menyinggung langkah chmod.
+- **`git safe.directory`.** Repo tidak lagi milik root sementara `sudo make
+  update` menjalankan git sebagai root — tanpa ini git menolak dengan *detected
+  dubious ownership* dan membatalkan seluruh pembaruan.
+
+`find … -exec … +`, bukan `\;`: hasilnya sama, tetapi `\;` memanggil `chmod`
+sekali per berkas dan `vendor/` sendirian berisi puluhan ribu berkas.
 
 `artisan` dijalankan sebagai `www-data` (lewat `runuser`), bukan root. Kalau
 dijalankan sebagai root, log dan berkas cache yang dibuatnya jadi milik root —
