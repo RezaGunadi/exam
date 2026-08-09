@@ -60,6 +60,15 @@ chmod 700 "$CERT_DIR"
 PHP_SOCK="$(find_php_sock || true)"
 [ -n "$PHP_SOCK" ] || die "PHP-FPM belum berjalan — jalankan dulu: sudo make nginx"
 
+# Kirim CSR ke Origin CA dengan satu header autentikasi tertentu.
+cf_post_certificate() {
+  curl -sS --max-time 30 -X POST \
+    'https://api.cloudflare.com/client/v4/certificates' \
+    -H "$2" \
+    -H 'Content-Type: application/json' \
+    --data "$1" 2>/dev/null || true
+}
+
 # Minta Origin Certificate baru ke Cloudflare.
 #
 # CSR-nya dibuat di sini dan kunci privatnya TIDAK PERNAH meninggalkan server —
@@ -83,18 +92,42 @@ issue_origin_cert() {
     '{hostnames: [$host], requested_validity: 5475,
       request_type: "origin-rsa", csr: $csr}')"
 
-  resp="$(curl -sS --max-time 30 -X POST \
-    'https://api.cloudflare.com/client/v4/certificates' \
-    -H "X-Auth-User-Service-Key: ${CF_ORIGIN_CA_KEY}" \
-    -H 'Content-Type: application/json' \
-    --data "$body" 2>/dev/null || true)"
+  # Endpoint ini menerima DUA bentuk kredensial, dan keduanya memakai header
+  # yang sama sekali berbeda:
+  #
+  #   Origin CA Key (diawali v1.0-)          → X-Auth-User-Service-Key
+  #   API Token dengan izin SSL & Certificates → Authorization: Bearer
+  #
+  # Dashboard Cloudflare sekarang lebih sering mengarahkan orang ke API Token,
+  # sementara dokumentasi lama menyebut Origin CA Key. Menebak dari bentuk
+  # nilainya tidak cukup andal — keduanya dicoba, karena jawaban Cloudflare
+  # untuk header yang salah hanyalah "Authentication failed", yang sama sekali
+  # tidak menyinggung bahwa masalahnya ada di JENIS kunci.
+  local h1="X-Auth-User-Service-Key: ${CF_ORIGIN_CA_KEY}"
+  local h2="Authorization: Bearer ${CF_ORIGIN_CA_KEY}"
+  case "$CF_ORIGIN_CA_KEY" in
+    v1.0-*) : ;;                      # bentuk Origin CA Key — urutan sudah pas
+    *) h1="Authorization: Bearer ${CF_ORIGIN_CA_KEY}"
+       h2="X-Auth-User-Service-Key: ${CF_ORIGIN_CA_KEY}" ;;
+  esac
 
+  resp="$(cf_post_certificate "$body" "$h1")"
   if [ "$(echo "$resp" | jq -r '.success // false' 2>/dev/null)" != "true" ]; then
-    warn "Cloudflare menolak permintaan sertifikat untuk $domain:"
-    echo "$resp" | jq -r '.errors[]?.message' 2>/dev/null | sed 's/^/       /' \
-      || echo "       (jawaban tidak terbaca)"
-    rm -rf "$tmpdir"
-    return 1
+    local alt
+    alt="$(cf_post_certificate "$body" "$h2")"
+    if [ "$(echo "$alt" | jq -r '.success // false' 2>/dev/null)" = "true" ]; then
+      resp="$alt"
+    else
+      warn "Cloudflare menolak permintaan sertifikat untuk $domain:"
+      echo "$resp" | jq -r '.errors[]?.message' 2>/dev/null | sed 's/^/       /' \
+        || echo "       (jawaban tidak terbaca)"
+      warn "  Kedua bentuk kredensial ditolak. CF_ORIGIN_CA_KEY harus salah satu:"
+      warn "    a) Origin CA Key — My Profile > API Tokens > Origin CA Key (v1.0-...)"
+      warn "    b) API Token dengan izin User > Origin CA Keys, atau"
+      warn "       Zone > SSL and Certificates > Edit"
+      rm -rf "$tmpdir"
+      return 1
+    fi
   fi
 
   # Kunci dipasang lebih dulu dengan mode 600. Sertifikat tanpa kunci tidak
