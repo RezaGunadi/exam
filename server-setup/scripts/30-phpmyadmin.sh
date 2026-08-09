@@ -82,8 +82,15 @@ else
   ok "basic-auth dibuat untuk $PMA_AUTH_USER"
 fi
 
-PHP_VER="$(ls /run/php/ 2>/dev/null | grep -oP 'php\K[0-9.]+(?=-fpm.sock)' | head -1)"
-PHP_SOCK="/run/php/php${PHP_VER}-fpm.sock"
+# Socket dicari lewat glob, bukan `grep -oP`. Versi lama menyusun path dari
+# nomor versi hasil regex; bila regex itu gagal, path-nya menjadi
+# "/run/php/php-fpm.sock" yang tidak ada — dan skrip TETAP LANJUT, sehingga
+# phpMyAdmin baru ketahuan rusak saat dibuka (502, tanpa petunjuk apa pun).
+PHP_SOCK=""
+for candidate in /run/php/php*-fpm.sock; do
+  [ -S "$candidate" ] && { PHP_SOCK="$candidate"; break; }
+done
+[ -n "$PHP_SOCK" ] || die "socket PHP-FPM tidak ditemukan — jalankan 'sudo make nginx' lebih dulu"
 PMA_PORT="${PMA_PORT:-8081}"
 
 AVAIL=/etc/nginx/sites-available/phpmyadmin

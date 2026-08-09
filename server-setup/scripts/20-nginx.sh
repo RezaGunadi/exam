@@ -17,10 +17,38 @@ require_apt
 log "nginx + PHP-FPM"
 apt_install nginx php-fpm php-mysql php-mbstring php-zip php-gd php-curl php-xml
 
-PHP_VER="$(ls /run/php/ 2>/dev/null | grep -oP 'php\K[0-9.]+(?=-fpm.sock)' | head -1)"
-[ -n "$PHP_VER" ] || die "socket PHP-FPM tidak ditemukan di /run/php/"
-PHP_SOCK="/run/php/php${PHP_VER}-fpm.sock"
-ok "PHP-FPM $PHP_VER ($PHP_SOCK)"
+# Socket PHP-FPM baru ADA setelah layanannya berjalan, jadi layanannya
+# dinyalakan lebih dulu. Sebelumnya skrip langsung berhenti bila socket belum
+# muncul — padahal penyebabnya cuma layanan yang belum start, bukan pemasangan
+# yang gagal.
+#
+# Pencariannya memakai glob shell, bukan `grep -oP`: PCRE tidak selalu tersedia
+# dan gagal pada sebagian locale, dengan pesan yang sama sekali tidak
+# menjelaskan hubungannya dengan PHP.
+find_php_sock() {
+  local candidate
+  for candidate in /run/php/php*-fpm.sock; do
+    [ -S "$candidate" ] && { echo "$candidate"; return 0; }
+  done
+  return 1
+}
+
+PHP_SOCK="$(find_php_sock || true)"
+if [ -z "$PHP_SOCK" ]; then
+  log "menyalakan PHP-FPM"
+  for unit in $(systemctl list-unit-files --no-legend 'php*-fpm.service' 2>/dev/null | awk '{print $1}'); do
+    systemctl enable --now "$unit" >/dev/null 2>&1 || true
+  done
+  sleep 2
+  PHP_SOCK="$(find_php_sock || true)"
+fi
+
+if [ -z "$PHP_SOCK" ]; then
+  warn "socket PHP-FPM tidak ditemukan di /run/php/."
+  warn "  Periksa: systemctl status 'php*-fpm'"
+  die "PHP-FPM belum berjalan — situs PHP tidak bisa dikonfigurasi"
+fi
+ok "PHP-FPM ($PHP_SOCK)"
 
 systemctl enable --now nginx >/dev/null 2>&1 || true
 
