@@ -161,9 +161,20 @@ HTML
   # memang tidak ada yang bisa disajikan. Tetapi di log ia terbaca seperti salah
   # konfigurasi, dan orang menghabiskan waktu memeriksa server block yang
   # sebenarnya sudah benar. Disebutkan di sini, saat penyebabnya masih jelas.
-  if ! is_proxy_site "$site" && [ -z "$(ls -A "$root" 2>/dev/null || true)" ]; then
-    warn "$root KOSONG — situs ini akan menjawab 403 sampai isinya ada"
-    [ -n "$repo" ] && warn "  Klon gagal? Periksa: sudo ssh -T git@github.com"
+  if ! is_proxy_site "$site"; then
+    docroot="$(site_docroot "$site")"
+    if [ -z "$(ls -A "$docroot" 2>/dev/null || true)" ]; then
+      warn "$docroot KOSONG — situs ini akan menjawab 403 sampai isinya ada"
+      [ -n "$repo" ] && warn "  Klon gagal? Periksa: sudo ssh -T git@github.com"
+    elif [ "$docroot" = "$root" ] && [ -f "$root/composer.json" ]; then
+      # Aplikasi PHP yang akar publiknya TIDAK ketemu. Menyajikan akar repo
+      # membuka app/, storage/, dan seluruh kode sumber ke internet.
+      warn "$site tampak aplikasi PHP tetapi tidak punya public/index.php"
+      warn "  Akar repo disajikan apa adanya — kode sumbernya ikut terbuka."
+      warn "  Tentukan subdirektorinya lewat SITE_ROOTS di .env."
+    elif [ "$docroot" != "$root" ]; then
+      ok "root $site → ${docroot#/var/www/}"
+    fi
   fi
 
   enabled="/etc/nginx/sites-enabled/${site}"

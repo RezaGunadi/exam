@@ -273,9 +273,44 @@ is_proxy_site() {
   return 1
 }
 
+# Direktori yang HARUS disajikan nginx untuk sebuah situs.
+#
+# Menunjuk root ke akar repo adalah kesalahan yang menghasilkan dua akibat
+# sekaligus, dan keduanya tidak saling menjelaskan:
+#
+#   1. Laravel tidak punya index.php di akar repo — try_files gagal, jatuh ke
+#      indeks direktori, dan nginx menjawab 403. Di log ia terbaca seperti
+#      masalah izin, padahal soal alamat.
+#   2. app/, storage/, composer.json, dan seluruh kode sumber jadi bisa diunduh
+#      siapa saja. Aturan deny hanya menutup berkas berawalan titik.
+#
+# Urutannya: SITE_ROOTS di .env menang; sisanya dideteksi dari isi direktori.
+site_docroot() {
+  local site="$1"
+  local base="/var/www/${site}"
+  local sub
+
+  sub="$(kv_lookup "$site" "${SITE_ROOTS:-}")"
+  if [ -n "$sub" ]; then
+    echo "${base}/${sub#/}"
+    return 0
+  fi
+
+  # Laravel, Symfony, dan hampir semua kerangka PHP modern.
+  [ -f "${base}/public/index.php" ] && { echo "${base}/public"; return 0; }
+  # Next.js `output: "export"` dan sejenisnya.
+  [ -f "${base}/out/index.html" ] && { echo "${base}/out"; return 0; }
+  # Hasil build Vite/Rollup.
+  [ -f "${base}/dist/index.html" ] && { echo "${base}/dist"; return 0; }
+
+  echo "$base"
+}
+
 # Isi server block sebuah situs — bagian yang sama untuk HTTP maupun HTTPS.
 site_body() {
   local site="$1" php_sock="$2"
+  local docroot
+  docroot="$(site_docroot "$site")"
 
   # Unggahan jawaban bergambar dan impor soal lewat di sini.
   echo "    client_max_body_size 32M;"
@@ -324,7 +359,7 @@ site_body() {
 CONF
   else
     cat <<CONF
-    root  /var/www/${site};
+    root  ${docroot};
     index index.php index.html;
 
     location / {
