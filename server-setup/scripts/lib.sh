@@ -230,12 +230,21 @@ site_cert_paths() {
 #
 # Bentuk lama `listen 443 ssl http2` masih diterima versi baru, hanya memberi
 # peringatan — jadi ia yang dipakai saat versinya tidak terbaca sama sekali.
-listen_ssl_lines() {
-  local ver
-  ver="$(nginx -v 2>&1 | sed -n 's#.*nginx/\([0-9][0-9.]*\).*#\1#p')"
+# Apakah nginx yang terpasang minimal versi <arg>?
+nginx_at_least() {
+  local want="$1" ver
+  # grep + cut, bukan sed: pola sed penuh backslash mudah rusak saat berkas
+  # ini disunting lewat perkakas lain, dan rusaknya diam-diam.
+  ver="$(nginx -v 2>&1 | grep -o "nginx/[0-9.]*" | cut -d/ -f2)"
+  [ -n "$ver" ] || return 1
+  # Dua echo, bukan printf berformat: pola berisi backslash berulang kali rusak
+  # saat berkas ini disunting lewat perkakas lain — dan rusaknya diam-diam,
+  # menghasilkan perbandingan versi yang selalu menjawab "tidak".
+  [ "$( { echo "$want"; echo "$ver"; } | sort -V | head -1 )" = "$want" ]
+}
 
-  if [ -n "$ver" ] && \
-     [ "$(printf '1.25.1\n%s\n' "$ver" | sort -V | head -1)" = "1.25.1" ]; then
+listen_ssl_lines() {
+  if nginx_at_least 1.25.1; then
     echo "    listen 443 ssl;"
     echo "    listen [::]:443 ssl;"
     echo "    http2 on;"
@@ -341,6 +350,14 @@ CONF
 # tidak menghasilkan cadangan palsu maupun reload yang tidak perlu.
 write_site_conf() {
   local site="$1" domain="$2" php_sock="$3" cert="${4:-}" key="${5:-}"
+  # SITE_DOMAINS boleh memuat beberapa nama untuk satu situs, dipisah "|":
+  #   amh=amhriset.com|www.amhriset.com
+  #
+  # Tanpa ini, www.amhriset.com tidak cocok dengan blok mana pun dan nginx
+  # menyajikannya dari blok PERTAMA menurut abjad — lengkap dengan sertifikat
+  # milik situs lain. Pengunjung menerima peringatan sertifikat, lalu isi yang
+  # sama sekali bukan miliknya.
+  local server_names="${domain//|/ }"
   # NGINX_SITES_DIR hanya untuk menguji keluaran fungsi ini tanpa root.
   local avail="${NGINX_SITES_DIR:-/etc/nginx/sites-available}/${site}"
   local tmp
@@ -357,7 +374,7 @@ write_site_conf() {
 server {
     listen 80;
     listen [::]:80;
-    server_name ${domain};
+    server_name ${server_names};
 
     # Cloudflare tetap boleh menyambung lewat 80; sisanya diarahkan ke HTTPS.
     location / {
@@ -369,7 +386,7 @@ server {
 CONF
       listen_ssl_lines
       cat <<CONF
-    server_name ${domain};
+    server_name ${server_names};
 
     ssl_certificate     ${cert};
     ssl_certificate_key ${key};
@@ -385,7 +402,7 @@ CONF
 server {
     listen 80;
     listen [::]:80;
-    server_name ${domain};
+    server_name ${server_names};
 
 CONF
       site_body "$site" "$php_sock"
@@ -402,10 +419,71 @@ CONF
   backup_once "$avail"
   mv "$tmp" "$avail"
   chmod 644 "$avail"
-  ok "server block $site → ${domain}${cert:+ (HTTPS)}"
+  ok "server block $site → ${server_names}${cert:+ (HTTPS)}"
 }
 
 # Nama database yang aman dipakai MySQL.
 sanitize_db_name() {
   echo "$1" | tr '[:upper:]-' '[:lower:]_' | sed 's/[^a-z0-9_]//g'
+}
+
+# Blok penangkap untuk Host yang tidak cocok dengan server_name mana pun.
+#
+# TANPA INI NGINX MENYAJIKAN BLOK PERTAMA MENURUT ABJAD.
+#
+# Akibatnya bukan sekadar salah halaman: pengunjung yang mengetik domain yang
+# belum dikonfigurasi — atau pemindai yang menembak IP server langsung —
+# menerima sertifikat milik situs LAIN beserta isinya. Di log, `server:` dan
+# `host:` tampak tidak nyambung, dan penyebabnya hampir mustahil ditebak dari
+# sana.
+#
+# 444 menutup koneksi tanpa menjawab apa pun. Untuk permintaan yang memang
+# salah alamat, itu jawaban yang paling jujur sekaligus paling murah.
+write_default_server() {
+  local avail="${NGINX_SITES_DIR:-/etc/nginx/sites-available}/000-default"
+  local tmp
+  tmp="$(mktemp)"
+
+  cat > "$tmp" <<'CONF'
+# Dibuat oleh server-setup — JANGAN disunting manual.
+#
+# Menangkap Host yang tidak cocok dengan server_name mana pun, supaya nginx
+# tidak menyajikan situs pertama menurut abjad berikut sertifikatnya.
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+    return 444;
+}
+CONF
+
+  # Kebocoran sertifikat terjadi di 443, bukan 80: nginx memilih blok pertama
+  # menurut abjad untuk SNI yang tidak dikenal, lalu menyajikan sertifikat
+  # SITUS LAIN. ssl_reject_handshake menolak jabat tangannya sejak awal,
+  # sehingga tidak ada sertifikat yang pernah dikirim.
+  #
+  # Butuh nginx 1.19.4. Pada versi lebih tua tidak ada padanan yang aman:
+  # satu-satunya cara adalah sertifikat khusus untuk blok penangkap, dan
+  # sertifikat asal-asalan di pintu depan lebih berisiko daripada masalah
+  # yang hendak diperbaikinya.
+  if nginx_at_least 1.19.4; then
+    cat >> "$tmp" <<'CONF'
+
+server {
+    listen 443 ssl default_server;
+    listen [::]:443 ssl default_server;
+    server_name _;
+    ssl_reject_handshake on;
+}
+CONF
+  fi
+
+  if [ -f "$avail" ] && cmp -s "$tmp" "$avail"; then
+    rm -f "$tmp"
+    skip "blok penangkap default"
+  else
+    mv "$tmp" "$avail"
+    chmod 644 "$avail"
+    ok "blok penangkap default (Host tak dikenal ditutup)"
+  fi
 }

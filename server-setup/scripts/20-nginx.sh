@@ -139,7 +139,7 @@ HTML
     # Situs berdomain dikelola sepenuhnya dari .env. Bila sertifikatnya sudah
     # ada, blok 443 ikut ditulis di sini juga — supaya `make nginx` yang
     # dijalankan ulang setelah `make ssl` tidak diam-diam mematikan HTTPS.
-    if paths="$(site_cert_paths "$domain")"; then
+    if paths="$(site_cert_paths "${domain%%|*}")"; then
       read -r certf keyf <<< "$paths"
       write_site_conf "$site" "$domain" "$PHP_SOCK" "$certf" "$keyf"
     else
@@ -157,6 +157,15 @@ HTML
     warn "$site belum punya domain — tambahkan ke SITE_DOMAINS di .env"
   fi
 
+  # Root kosong menghasilkan 403 "directory index is forbidden" — nginx benar,
+  # memang tidak ada yang bisa disajikan. Tetapi di log ia terbaca seperti salah
+  # konfigurasi, dan orang menghabiskan waktu memeriksa server block yang
+  # sebenarnya sudah benar. Disebutkan di sini, saat penyebabnya masih jelas.
+  if ! is_proxy_site "$site" && [ -z "$(ls -A "$root" 2>/dev/null || true)" ]; then
+    warn "$root KOSONG — situs ini akan menjawab 403 sampai isinya ada"
+    [ -n "$repo" ] && warn "  Klon gagal? Periksa: sudo ssh -T git@github.com"
+  fi
+
   enabled="/etc/nginx/sites-enabled/${site}"
   if [ -L "$enabled" ]; then
     skip "symlink $site"
@@ -171,6 +180,12 @@ if [ -L /etc/nginx/sites-enabled/default ]; then
   rm -f /etc/nginx/sites-enabled/default
   ok "situs bawaan nginx dinonaktifkan"
 fi
+
+# Penggantinya: blok penangkap milik kita sendiri. Menghapus situs bawaan saja
+# tidak cukup — tanpa default_server, nginx memilih blok PERTAMA menurut abjad
+# untuk Host yang tidak cocok, lengkap dengan sertifikatnya.
+write_default_server
+ln -sf /etc/nginx/sites-available/000-default /etc/nginx/sites-enabled/000-default
 
 log "menguji konfigurasi nginx"
 nginx -t || die "konfigurasi nginx tidak valid — tidak ada yang di-reload"

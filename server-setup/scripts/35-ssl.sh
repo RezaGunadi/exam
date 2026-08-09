@@ -180,9 +180,18 @@ issue_letsencrypt_cert() {
     warn "CERTBOT_EMAIL kosong — tidak ada peringatan bila perpanjangan gagal"
   fi
 
-  log "meminta sertifikat Let's Encrypt untuk $domain"
+  # Seluruh nama situs masuk ke SATU sertifikat: amhriset.com dan
+  # www.amhriset.com harus sama-sama sah, kalau tidak salah satunya menerima
+  # peringatan sertifikat di browser.
+  local names=""
+  local n
+  for n in ${domain//|/ }; do
+    names="$names -d $n"
+  done
+
+  log "meminta sertifikat Let's Encrypt untuk ${domain//|/, }"
   # shellcheck disable=SC2086
-  if out="$(certbot certonly --nginx --non-interactive --agree-tos $reg             -d "$domain" 2>&1)"; then
+  if out="$(certbot certonly --nginx --non-interactive --agree-tos $reg             $names 2>&1)"; then
     install_renewal_hook
     ok "sertifikat Let's Encrypt $domain (berlaku 90 hari, diperpanjang otomatis)"
     return 0
@@ -201,7 +210,7 @@ issue_letsencrypt_cert() {
 ensure_cert() {
   local domain="$1" cert="$2" key="$3" paths
 
-  if paths="$(site_cert_paths "$domain")"; then
+  if paths="$(site_cert_paths "${domain%%|*}")"; then
     read -r CERT_FILE KEY_FILE <<< "$paths"
     # 30 hari, bukan 0: sertifikat yang kedaluwarsa besok pagi sama saja dengan
     # yang sudah kedaluwarsa — keduanya membuat situs tidak bisa dibuka.
@@ -216,14 +225,14 @@ ensure_cert() {
   # sekali, hanya domain yang sudah mengarah ke sini.
   if [ "${SSL_METHOD:-cloudflare}" = "letsencrypt" ]; then
     if issue_letsencrypt_cert "$domain"; then
-      CERT_FILE="/etc/letsencrypt/live/${domain}/fullchain.pem"
-      KEY_FILE="/etc/letsencrypt/live/${domain}/privkey.pem"
+      CERT_FILE="/etc/letsencrypt/live/${domain%%|*}/fullchain.pem"
+      KEY_FILE="/etc/letsencrypt/live/${domain%%|*}/privkey.pem"
       return 0
     fi
     return 1
   fi
 
-  if [ -s "$LOCAL_CERTS/${domain}.pem" ] && [ -s "$LOCAL_CERTS/${domain}.key" ]; then
+  if [ -s "$LOCAL_CERTS/${domain%%|*}.pem" ] && [ -s "$LOCAL_CERTS/${domain%%|*}.key" ]; then
     # Konsol web/VNC kerap menelan karakter saat menempel teks panjang, dan PEM
     # yang terpotong lolos sampai `nginx -t` — yang lalu mengeluh tentang
     # konfigurasi, bukan tentang tempelan yang rusak. Dicocokkan di sini selagi
@@ -272,8 +281,10 @@ while read -r site; do
   domain="$(kv_lookup "$site" "${SITE_DOMAINS:-}")"
   [ -n "$domain" ] || continue
 
-  cert="${CERT_DIR}/${domain}.pem"
-  key="${CERT_DIR}/${domain}.key"
+  # certbot dan Origin CA sama-sama menyimpan di bawah nama pertama.
+  primary="${domain%%|*}"
+  cert="${CERT_DIR}/${primary}.pem"
+  key="${CERT_DIR}/${primary}.key"
 
   # Satu situs yang gagal TIDAK boleh menjatuhkan sisanya: server yang separuh
   # situsnya HTTPS jauh lebih baik daripada yang setupnya berhenti di tengah.
