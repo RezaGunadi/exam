@@ -1,7 +1,13 @@
 # Setup Server
 
-Penyiapan server sekali jalan untuk Debian/Ubuntu: MySQL, nginx, PHP-FPM,
-phpMyAdmin, dan direktori situs untuk semua proyek.
+Penyiapan server sekali jalan untuk Debian/Ubuntu: **Docker**, MySQL, nginx,
+PHP-FPM, phpMyAdmin, dan direktori situs untuk semua proyek.
+
+Satu-satunya yang perlu ada lebih dulu: `make` dan `git`.
+
+```bash
+sudo apt update && sudo apt install -y make git
+```
 
 ```bash
 sudo make server
@@ -43,6 +49,15 @@ kali dijalankan, dan tidak ikut ke git):
 | `DATABASES` | Database yang dibuat, satu per proyek |
 | `SITES` | Direktori `/var/www/<nama>` + server block + symlink |
 | `PMA_*` | phpMyAdmin: port dan basic-auth |
+
+Docker dipasang dari repositori resminya, bukan lewat `curl … | sh`. Skrip
+sekali-jalan itu tidak memberi jalur pembaruan: paketnya tidak ikut
+`apt upgrade`, sehingga perbaikan keamanan Docker tidak pernah sampai.
+
+**Urutannya penting** dan sudah dipaksakan di Makefile: Docker dipasang SEBELUM
+MySQL. Skrip MySQL menentukan alamat yang didengarkan dari ada-tidaknya
+jembatan `docker0`; bila Docker menyusul belakangan, MySQL sudah terlanjur
+terikat ke loopback saja dan container tidak akan pernah bisa menyambung.
 
 ## Setelah `make server`
 

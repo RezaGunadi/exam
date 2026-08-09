@@ -5,6 +5,7 @@
 # yang baru, tanpa menyentuh yang lama.
 #
 #   sudo make server     # seluruh rangkaian
+#   sudo make docker     # Docker Engine + plugin Compose
 #   sudo make mysql      # MySQL + pengguna + database per proyek
 #   sudo make nginx      # nginx + PHP-FPM + situs + symlink
 #   sudo make phpmyadmin # panel database (port terpisah + basic auth)
@@ -12,11 +13,12 @@
 
 SHELL := /bin/bash
 
-.PHONY: help server preflight mysql nginx phpmyadmin status env
+.PHONY: help server preflight docker mysql nginx phpmyadmin status env
 
 help:
 	@echo "Setup server — target yang tersedia:"
 	@echo "  sudo make server       Pasang & konfigurasi semuanya"
+	@echo "  sudo make docker       Docker Engine + plugin Compose saja"
 	@echo "  sudo make mysql        MySQL saja"
 	@echo "  sudo make nginx        nginx + situs saja"
 	@echo "  sudo make phpmyadmin   phpMyAdmin saja"
@@ -33,7 +35,13 @@ env:
 preflight: env
 	@bash scripts/00-preflight.sh
 
-mysql: preflight
+docker: preflight
+	@bash scripts/05-docker.sh
+
+# Docker HARUS lebih dulu: skrip MySQL menentukan alamat yang didengarkan dari
+# ada-tidaknya jembatan docker0. Dipasang belakangan, MySQL sudah terlanjur
+# terikat ke loopback dan container tidak akan bisa menyambung.
+mysql: docker
 	@bash scripts/10-mysql.sh
 
 nginx: preflight
@@ -44,7 +52,7 @@ phpmyadmin: nginx
 
 # Urutannya penting: MySQL lebih dulu supaya phpMyAdmin punya yang dipantau,
 # nginx sebelum phpMyAdmin karena panel itu disajikan lewat nginx.
-server: preflight mysql nginx phpmyadmin
+server: preflight docker mysql nginx phpmyadmin
 	@echo ""
 	@echo "Setup selesai."
 	@echo ""
