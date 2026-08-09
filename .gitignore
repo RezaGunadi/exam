@@ -34,3 +34,12 @@ ragh/
 ragh-pay/
 ragh_management/
 repost/
+
+# Kunci SSH & berkas kunci lain — JANGAN PERNAH masuk git.
+# Sekali ter-commit, ia tetap ada di riwayat meski berkasnya dihapus kemudian.
+*.ppk
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+ssh*key*.txt
