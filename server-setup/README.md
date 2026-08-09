@@ -81,6 +81,34 @@ Empat langkah ini **sengaja tidak diotomatiskan**, karena butuh keputusan Anda:
 
 Periksa hasilnya kapan saja dengan `make status`.
 
+## Di belakang Cloudflare
+
+Situs yang diproksikan Cloudflare butuh satu langkah tambahan:
+
+```bash
+sudo make cloudflare
+```
+
+**Tanpa ini pembatasan laju tidak bekerja, dan diamnya berbahaya.** Setiap
+permintaan tiba dari alamat edge Cloudflare, sehingga seluruh dunia terlihat
+berasal dari segelintir IP. Pembatas "3 kali salah login" lalu mengunci semua
+orang sekaligus, sementara penyerang sungguhan tidak pernah terpisahkan dari
+pengguna biasa.
+
+Perintah itu memasang daftar rentang IP Cloudflare dan menyuruh nginx membaca
+`CF-Connecting-IP` — tetapi **hanya** untuk koneksi yang memang datang dari
+rentang tersebut. Tanpa syarat itu, siapa pun yang menghubungi IP server secara
+langsung bisa mengarang header dan menyamar sebagai alamat mana pun.
+
+Jalankan ulang sesekali; rentang Cloudflare bertambah dari waktu ke waktu.
+
+Untuk HTTPS-nya, pakai **Origin Certificate** (SSL/TLS → Origin Server →
+Create Certificate), bukan certbot: certbot memvalidasi lewat port 80 yang
+sudah diproksikan Cloudflare, sehingga perpanjangannya bisa gagal diam-diam
+berbulan-bulan kemudian — tepat saat tidak ada yang memperhatikan. Origin
+Certificate berlaku 15 tahun. Templat server block-nya ada di
+[`templates/site-ssl-cloudflare.conf.example`](templates/site-ssl-cloudflare.conf.example).
+
 ## Catatan keamanan
 
 - Password root MySQL dibuat **acak** dan disimpan di `.mysql-root-password`

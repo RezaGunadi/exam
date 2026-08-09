@@ -139,8 +139,18 @@ server {
         proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
         proxy_set_header Host              \$host;
+        # \$remote_addr, BUKAN \$proxy_add_x_forwarded_for.
+        #
+        # Yang kedua menyambungkan header X-Forwarded-For yang dikirim
+        # pengunjung dengan alamat aslinya. Aplikasi membaca entri pertama —
+        # yaitu bagian yang dikarang pengunjung. Cukup mengganti isinya tiap
+        # percobaan, dan pembatas login 3-kali-salah hilang sama sekali.
+        #
+        # nginx di sini adalah pintu terluar, jadi \$remote_addr sudah alamat
+        # sebenarnya. Di belakang Cloudflare, 25-cloudflare-realip.sh yang
+        # memulihkannya dari CF-Connecting-IP.
         proxy_set_header X-Real-IP         \$remote_addr;
-        proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For   \$remote_addr;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_read_timeout 300s;
     }
@@ -152,8 +162,18 @@ server {
         proxy_set_header Upgrade           \$http_upgrade;
         proxy_set_header Connection        "upgrade";
         proxy_set_header Host              \$host;
+        # \$remote_addr, BUKAN \$proxy_add_x_forwarded_for.
+        #
+        # Yang kedua menyambungkan header X-Forwarded-For yang dikirim
+        # pengunjung dengan alamat aslinya. Aplikasi membaca entri pertama —
+        # yaitu bagian yang dikarang pengunjung. Cukup mengganti isinya tiap
+        # percobaan, dan pembatas login 3-kali-salah hilang sama sekali.
+        #
+        # nginx di sini adalah pintu terluar, jadi \$remote_addr sudah alamat
+        # sebenarnya. Di belakang Cloudflare, 25-cloudflare-realip.sh yang
+        # memulihkannya dari CF-Connecting-IP.
         proxy_set_header X-Real-IP         \$remote_addr;
-        proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For   \$remote_addr;
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
 }

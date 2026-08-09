@@ -13,7 +13,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: help server preflight docker mysql nginx phpmyadmin status env
+.PHONY: help server preflight docker mysql nginx cloudflare phpmyadmin status env
 
 help:
 	@echo "Setup server — target yang tersedia:"
@@ -21,6 +21,7 @@ help:
 	@echo "  sudo make docker       Docker Engine + plugin Compose saja"
 	@echo "  sudo make mysql        MySQL saja"
 	@echo "  sudo make nginx        nginx + situs saja"
+	@echo "  sudo make cloudflare   Pulihkan IP asli di belakang proxy Cloudflare"
 	@echo "  sudo make phpmyadmin   phpMyAdmin saja"
 	@echo "  make status            Lihat keadaan sekarang"
 	@echo ""
@@ -46,6 +47,12 @@ mysql: docker
 
 nginx: preflight
 	@bash scripts/20-nginx.sh
+
+# Dijalankan TERPISAH, bukan bagian dari `make server`: tidak semua situs
+# berada di belakang Cloudflare, dan memasang real_ip untuk yang tidak akan
+# membuat nginx mempercayai header dari pihak yang salah.
+cloudflare: nginx
+	@bash scripts/25-cloudflare-realip.sh
 
 phpmyadmin: nginx
 	@bash scripts/30-phpmyadmin.sh

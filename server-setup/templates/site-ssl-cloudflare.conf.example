@@ -1,0 +1,77 @@
+# Server block HTTPS untuk aplikasi container di belakang proxy Cloudflare.
+#
+# Salin ke /etc/nginx/sites-available/<nama>, ganti DOMAIN, lalu:
+#   sudo ln -sf /etc/nginx/sites-available/<nama> /etc/nginx/sites-enabled/<nama>
+#   sudo nginx -t && sudo systemctl reload nginx
+#
+# Sertifikatnya adalah CLOUDFLARE ORIGIN CERTIFICATE, bukan Let's Encrypt.
+# Alasannya: certbot memvalidasi lewat port 80 yang sudah diproksikan
+# Cloudflare, sehingga perpanjangannya bisa gagal diam-diam berbulan-bulan
+# kemudian — tepat saat tidak ada yang memperhatikan. Origin Certificate
+# berlaku 15 tahun dan tidak perlu diperpanjang.
+#
+# Buat di dashboard: SSL/TLS → Origin Server → Create Certificate.
+# Setelah terpasang, ubah mode SSL/TLS Cloudflare ke Full (strict).
+#
+# Jalankan `sudo make cloudflare` lebih dulu agar $remote_addr berisi IP asli
+# pengunjung, bukan alamat edge Cloudflare.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name DOMAIN;
+
+    # Cloudflare tetap boleh menyambung lewat 80 saat memvalidasi; sisanya
+    # diarahkan ke HTTPS.
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name DOMAIN;
+
+    ssl_certificate     /etc/ssl/cloudflare/DOMAIN.pem;
+    ssl_certificate_key /etc/ssl/cloudflare/DOMAIN.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_session_cache   shared:SSL:10m;
+    ssl_session_timeout 1d;
+
+    # Unggahan jawaban bergambar dan impor soal lewat di sini.
+    client_max_body_size 32M;
+
+    # ── API Go ────────────────────────────────────────────────────────────
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        # $remote_addr, BUKAN $proxy_add_x_forwarded_for — lihat catatan di
+        # scripts/25-cloudflare-realip.sh.
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Pengumpulan jawaban dan koreksi otomatis bisa memakan waktu.
+        # Timeout pendek di sini berarti jawaban siswa ditolak di detik-detik
+        # terakhir ujian — kegagalan yang paling mahal dari semuanya.
+        proxy_read_timeout    300s;
+        proxy_send_timeout    300s;
+        proxy_request_buffering off;
+    }
+
+    # ── Next.js ───────────────────────────────────────────────────────────
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        "upgrade";
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+    }
+}
