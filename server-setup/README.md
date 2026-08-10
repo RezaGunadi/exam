@@ -48,6 +48,7 @@ kali dijalankan, dan tidak ikut ke git):
 | `DB_USER`, `DB_PASSWORD` | Pengguna MySQL untuk semua aplikasi |
 | `DATABASES` | Database yang dibuat, satu per proyek |
 | `PHP_VERSION` | Versi PHP untuk semua situs — dipasang & diaktifkan `sudo make php` |
+| `NODE_SITES`, `NODE_VERSION` | Situs yang harus di-`npm run build` di server, dan versi Node-nya |
 | `SITES` | Direktori `/var/www/<nama>` + server block + symlink |
 | `SITE_DOMAINS` | `nama=domain` — mengisi `server_name` dan menentukan situs mana yang dapat HTTPS |
 | `SITE_REPOS` | `nama=url` — situs yang terdaftar akan **diklon dari git** |
@@ -121,6 +122,57 @@ situs terbukti sehat, buang sendiri:
 ```bash
 sudo apt purge 'php8.1-*' && sudo apt autoremove
 ```
+
+## Situs yang perlu di-build (Node.js)
+
+Sebagian situs menyimpan hasil buildnya di git, sebagian tidak. Yang menentukan
+hanya itu:
+
+| Situs | Hasil build | Butuh Node di server? |
+|---|---|---|
+| `company-kelasprivat` | `public/build/` ikut ke repo | **tidak** |
+| `ragh` | `out/` di-`.gitignore` | **ya** |
+
+Tanpa build, `/var/www/ragh` tidak punya apa pun untuk disajikan dan nginx
+menjawab 403.
+
+Daftarnya di `.env`, dan **eksplisit**:
+
+```bash
+NODE_SITES=ragh
+NODE_VERSION=22
+SITE_ROOTS=ragh=out
+```
+
+`sudo make node` — sudah termasuk dalam `sudo make server` — memasang Node lalu
+menjalankan `npm ci && npm run build` di `/var/www/<nama>` untuk tiap nama di
+`NODE_SITES`.
+
+**Kenapa tidak ditebak dari ada-tidaknya `package.json`.** Hampir semua proyek
+PHP di sini punya `package.json` untuk perkakas pengembangan. Menjalankan
+`npm run build` di sana bukan cuma mubazir — ia bisa menimpa aset yang sudah
+benar dengan hasil build setengah jadi.
+
+`NODE_SITES` kosong berarti skripnya tidak mengerjakan apa pun, termasuk **tidak
+menambahkan repo NodeSource**. Itu sebabnya target ini aman ikut dalam
+`make server`, tidak seperti `make php`.
+
+**Jangan pakai `apt install npm`.** Paket bawaan Ubuntu 22.04 menarik Node 12.22
+— di bawah syarat minimum hampir semua kerangka yang masih dirawat (Next.js 16
+butuh 20.9+). Kegagalannya bukan "versi terlalu lama" yang jelas, melainkan
+galat sintaks di dalam `node_modules` yang terbaca seperti paketnya yang rusak.
+`make node` mencabut paket apt itu lebih dulu, karena ia bentrok dengan paket
+NodeSource yang sudah memuat npm sendiri.
+
+**Isi `SITE_ROOTS` untuk tiap situs di `NODE_SITES`.** Deteksi otomatis mencari
+`out/index.html`; pada `make server` pertama direktori itu belum ada saat server
+block ditulis, sehingga root-nya jatuh ke akar repo. Skripnya menulis ulang
+server block setelah build berhasil, tetapi entri `SITE_ROOTS` membuat root-nya
+benar sejak awal dan tidak bergantung pada urutan sama sekali.
+
+Build yang gagal **tidak menghentikan setup** — sama seperti HTTPS. Situsnya
+menjawab 403 sampai berhasil, dan namanya disebut di akhir. Kode keluar 137 atau
+`Killed` berarti kehabisan memori, bukan kode yang salah; tambahkan swap.
 
 ## HTTPS
 

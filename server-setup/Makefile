@@ -9,13 +9,14 @@
 #   sudo make mysql      # MySQL + pengguna + database per proyek
 #   sudo make php        # pindahkan seluruh server ke PHP_VERSION di .env
 #   sudo make nginx      # nginx + PHP-FPM + situs + symlink
+#   sudo make node       # Node.js + build situs di NODE_SITES
 #   sudo make ssl        # Origin Certificate Cloudflare + server block 443
 #   sudo make phpmyadmin # panel database (port terpisah + basic auth)
 #   make status          # ringkasan keadaan server
 
 SHELL := /bin/bash
 
-.PHONY: help server preflight docker mysql php nginx cloudflare ssl phpmyadmin status env
+.PHONY: help server preflight docker mysql php nginx node cloudflare ssl phpmyadmin status env
 
 help:
 	@echo "Setup server — target yang tersedia:"
@@ -24,6 +25,7 @@ help:
 	@echo "  sudo make mysql        MySQL saja"
 	@echo "  sudo make php          Pindahkan PHP (CLI, FPM & server block) ke PHP_VERSION di .env"
 	@echo "  sudo make nginx        nginx + situs saja"
+	@echo "  sudo make node         Node.js + 'npm ci && npm run build' untuk NODE_SITES"
 	@echo "  sudo make ssl          HTTPS: Origin Certificate + server block 443"
 	@echo "  sudo make cloudflare   Pulihkan IP asli di belakang proxy Cloudflare"
 	@echo "  sudo make phpmyadmin   phpMyAdmin saja"
@@ -61,6 +63,15 @@ php: preflight
 nginx: preflight
 	@bash scripts/20-nginx.sh
 
+# IKUT dalam `make server`, tidak seperti `make php` — dan itu aman karena
+# NODE_SITES kosong berarti skripnya tidak mengerjakan apa pun, termasuk tidak
+# menambahkan repo NodeSource. Server yang tidak butuh Node tidak akan pernah
+# kejatuhan repo pihak ketiga hanya karena setup dijalankan.
+#
+# Harus SESUDAH nginx: repositorinya baru ada setelah 20-nginx.sh mengklonnya.
+node: nginx
+	@bash scripts/40-node.sh
+
 # Dijalankan TERPISAH, bukan bagian dari `make server`: tidak semua situs
 # berada di belakang Cloudflare, dan memasang real_ip untuk yang tidak akan
 # membuat nginx mempercayai header dari pihak yang salah.
@@ -77,9 +88,10 @@ phpmyadmin: nginx
 	@bash scripts/30-phpmyadmin.sh
 
 # Urutannya penting: MySQL lebih dulu supaya phpMyAdmin punya yang dipantau,
-# nginx sebelum phpMyAdmin karena panel itu disajikan lewat nginx, dan SSL
-# paling akhir karena ia menulis ulang server block yang sudah jadi.
-server: preflight docker mysql nginx phpmyadmin ssl
+# nginx sebelum phpMyAdmin karena panel itu disajikan lewat nginx, node setelah
+# nginx karena repositorinya baru ada setelah diklon, dan SSL paling akhir
+# karena ia menulis ulang server block yang sudah jadi.
+server: preflight docker mysql nginx node phpmyadmin ssl
 	@echo ""
 	@echo "Setup selesai — PERIKSA hasilnya, jangan berhenti di baris ini:"
 	@echo ""
