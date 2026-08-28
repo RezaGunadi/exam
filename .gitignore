@@ -43,3 +43,9 @@ repost/
 id_rsa*
 id_ed25519*
 ssh*key*.txt
+
+# Repo mandiri, sama seperti exam_*. Ditambahkan setelah keduanya sempat
+# ter-commit sebagai gitlink: klon repo ini tidak akan pernah bisa mengambil
+# isinya, jadi yang tersimpan hanya hash yang menunjuk ke tempat kosong.
+cuan_dari_ponsel/
+kelas_junior/
