@@ -365,3 +365,40 @@ Jalankan ulang sesekali; rentang Cloudflare bertambah dari waktu ke waktu.
   pengaman — pemindai otomatis rutin mencoba `/phpmyadmin` di setiap IP.
 - Konfigurasi yang sudah ada tidak pernah ditimpa diam-diam; berkas lama
   dicadangkan sebagai `<nama>.orig`.
+
+## "API tidak bisa konek ke MySQL padahal .env sudah benar"
+
+Gejala paling membingungkan di setup ini, dan sebabnya hampir selalu sama:
+**MySQL tidak mendengar di alamat yang dituju container.**
+
+`docker0` hanyalah jembatan bawaan Docker. Setiap proyek docker-compose membuat
+jembatannya SENDIRI (`br-xxxxxxxx`) dengan subnet berbeda — 172.18, 172.19, dan
+seterusnya. Baris `extra_hosts: host.docker.internal:host-gateway` di container
+menunjuk gateway jaringan **itu**, bukan docker0. Jadi container menyambung ke
+172.18.0.1 sementara MySQL hanya mendengar di 127.0.0.1 dan 172.17.0.1.
+
+Sambungannya ditolak sebelum urusan pengguna atau password dimulai — itulah
+kenapa memperbaiki `.env` tidak pernah menolong, dan kenapa grant `'172.%'`
+juga tidak: permintaannya tidak pernah sampai.
+
+Periksa dengan:
+
+```bash
+sudo make status
+```
+
+Bagian "MySQL terjangkau dari container?" menyebut tiap jembatan beserta
+jawabannya. Bila ada yang BEDA:
+
+```bash
+sudo make mysql
+```
+
+Perintah itu menambahkan alamat gateway tersebut ke `bind-address` dan
+me-restart MySQL. Aman diulang.
+
+**Kenapa jaringannya dibuat server-setup, bukan compose.** MySQL menolak START
+bila disuruh mendengar di alamat yang belum ada, jadi jembatannya harus lahir
+lebih dulu. `05-docker.sh` membuat jaringan `exam-v2` dengan subnet tetap
+(172.28.0.0/24) sebelum `10-mysql.sh` menentukan bind-address, dan
+`docker-compose.yml` proyek memakai ulang jaringan bernama sama.

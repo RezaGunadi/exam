@@ -148,4 +148,44 @@ else
   warn "  Jalankan ulang 'sudo make mysql' setelah docker0 ada."
 fi
 
+# ── Jaringan proyek dibuat DI SINI, sebelum MySQL menentukan bind-address ──
+#
+# Urutannya yang penting, bukan sekadar keberadaannya.
+#
+# Tiap proyek docker-compose punya jembatan sendiri dengan subnet berbeda dari
+# docker0, dan `extra_hosts: host-gateway` di container menunjuk gateway
+# jembatan ITU. Bila MySQL hanya mendengar di docker0, container compose
+# menyambung ke alamat yang tidak didengarkan siapa pun — sambungannya ditolak
+# sebelum urusan pengguna atau password dimulai. Itulah "API tidak bisa konek
+# padahal .env sudah benar".
+#
+# MySQL menolak START bila disuruh mendengar di alamat yang belum ada, jadi
+# jembatannya harus lahir LEBIH DULU. Membuat jaringannya di sini berarti
+# 10-mysql.sh sudah melihatnya, dan `make up` nanti memakai ulang jaringan yang
+# sama (namanya cocok dengan yang ditulis di docker-compose.yml proyek).
+#
+# Idempoten: jaringan yang sudah ada dilewati. Subnet dipatok di dalam 172.x
+# supaya tetap tercakup grant '172.%' di MySQL.
+buat_jaringan() {
+  nama="$1"
+  subnet="$2"
+  gateway="$3"
+  if docker network inspect "$nama" >/dev/null 2>&1; then
+    skip "jaringan $nama"
+    return 0
+  fi
+  if docker network create --driver bridge       --subnet "$subnet" --gateway "$gateway" "$nama" >/dev/null 2>&1; then
+    ok "jaringan $nama dibuat ($subnet)"
+  else
+    # Subnet bentrok dengan jaringan lain, atau Docker menolak. Bukan alasan
+    # menghentikan pemasangan: compose tetap bisa membuat jaringannya sendiri,
+    # hanya saja MySQL perlu 'sudo make mysql' sekali lagi sesudahnya.
+    warn "jaringan $nama gagal dibuat (subnet $subnet bentrok?)"
+    warn "  Jalankan 'sudo make mysql' SETELAH 'make up' agar MySQL mendengar"
+    warn "  di gateway jaringan yang akhirnya dipakai compose."
+  fi
+}
+
+buat_jaringan exam-v2 172.28.0.0/24 172.28.0.1
+
 log "Docker selesai ($(docker --version 2>/dev/null || echo 'versi tidak terbaca'))"

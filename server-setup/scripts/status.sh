@@ -54,5 +54,38 @@ else
 fi
 
 echo ""
+echo "MySQL terjangkau dari container?"
+# Pertanyaan yang paling sering ditanyakan saat "API tidak bisa konek padahal
+# .env sudah benar", dan paling susah dijawab dengan menebak.
+#
+# Yang diperiksa BUKAN apakah MySQL hidup — itu sudah di atas — melainkan
+# apakah ia mendengar di alamat yang dituju container. Container compose
+# menyambung lewat gateway jembatannya sendiri (br-*), bukan docker0, dan
+# MySQL yang hanya mendengar di docker0 menolak sambungan itu tanpa pernah
+# sampai ke urusan pengguna atau password.
+if command -v docker >/dev/null 2>&1 && command -v ss >/dev/null 2>&1; then
+  DENGAR="$(ss -lnt 2>/dev/null | awk '$4 ~ /:3306$/ {sub(/:3306$/, "", $4); print $4}' | sort -u)"
+  echo "  MySQL mendengar di: $(echo "$DENGAR" | tr '
+' ' ')"
+  ADA_MASALAH=0
+  for br in $(ip -4 -o addr show 2>/dev/null | awk '$2 == "docker0" || $2 ~ /^br-/ {print $2"="$4}'); do
+    nama="${br%%=*}"
+    gw="${br#*=}"
+    gw="${gw%%/*}"
+    if echo "$DENGAR" | grep -qx "$gw"; then
+      echo "  OK   $nama ($gw) — container di jaringan ini bisa menyambung"
+    else
+      echo "  BEDA $nama ($gw) — MySQL TIDAK mendengar di sini"
+      ADA_MASALAH=1
+    fi
+  done
+  if [ "$ADA_MASALAH" = "1" ]; then
+    echo "  -> Jalankan 'sudo make mysql' untuk menambahkan alamat itu ke bind-address."
+  fi
+else
+  echo "  (docker atau ss tidak tersedia)"
+fi
+
+echo ""
 echo "Port yang didengarkan:"
 ss -lntp 2>/dev/null | awk 'NR>1 {print "  " $4 "  " $NF}' | sort -u | head -20

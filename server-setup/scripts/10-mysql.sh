@@ -82,17 +82,35 @@ BIND_CONF=/etc/mysql/mysql.conf.d/zz-bind-address.cnf
 # pertama. Tanpa `|| true`, MySQL selesai terpasang dengan benar tetapi `make`
 # tetap melaporkan gagal — persis gejala yang membingungkan: layanan berjalan,
 # tetapi langkah berikutnya tidak pernah dijalankan.
-detect_docker_gateway() {
+# SELURUH jembatan Docker, bukan docker0 saja.
+#
+# Ini pernah menjadi bug yang sangat membingungkan: "API tidak bisa konek ke
+# MySQL padahal .env sudah benar".
+#
+# docker0 hanyalah jembatan BAWAAN. Setiap proyek docker-compose membuat
+# jembatannya SENDIRI (br-xxxxxxxx) dengan subnet berbeda — 172.18, 172.19, dan
+# seterusnya. `extra_hosts: host.docker.internal:host-gateway` menunjuk gateway
+# jaringan tempat container itu berada, jadi container compose menuju 172.18.0.1
+# sementara MySQL hanya mendengar di 172.17.0.1. Sambungannya ditolak sebelum
+# urusan pengguna atau password dimulai, dan grant '172.%' tidak menolong sama
+# sekali: permintaannya tidak pernah sampai.
+#
+# HANYA alamat yang benar-benar ADA yang boleh masuk daftar. MySQL menolak
+# START bila disuruh mendengar di alamat yang tidak dimiliki mesin ini
+# ("Cannot assign requested address"), jadi menyebut subnet proyek yang
+# jaringannya belum dibuat akan mematikan MySQL sepenuhnya — jauh lebih buruk
+# daripada bug yang sedang diperbaiki. Jaringan proyek dibuat lebih dulu oleh
+# 05-docker.sh supaya jembatannya sudah ada saat baris ini berjalan.
+detect_docker_gateways() {
   command -v ip >/dev/null 2>&1 || return 0
-  ip -4 -o addr show docker0 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1 || true
+  ip -4 -o addr show 2>/dev/null     | awk '$2 == "docker0" || $2 ~ /^br-/ {print $4}'     | cut -d/ -f1     | sort -u || true
 }
 
-DOCKER_GW="$(detect_docker_gateway || true)"
-if [ -n "$DOCKER_GW" ]; then
-  BIND_LIST="127.0.0.1,${DOCKER_GW}"
-else
-  BIND_LIST="127.0.0.1"
-fi
+BIND_LIST="127.0.0.1"
+for gw in $(detect_docker_gateways || true); do
+  BIND_LIST="${BIND_LIST},${gw}"
+done
+DOCKER_GW="$(detect_docker_gateways | head -1 || true)"
 
 # Tulis ulang bila daftar alamatnya berubah — mis. Docker baru dipasang setelah
 # MySQL. Tanpa ini, menjalankan ulang setelah memasang Docker tidak berefek.
