@@ -2241,7 +2241,7 @@ Yang paling berbahaya bukan jumlahnya:
 
 Dijaga `TestSetiapKolomStringMenyebutUkuran`.
 
-### C. Nilai pecahan siswa terpotong — BELUM diperbaiki
+### C. Nilai pecahan siswa terpotong — ✅ SELESAI
 
 Enam kolom nilai (`exam_results.score`, `student_answers.points_earned`, dll)
 bertipe `decimal(5,2)` di v1, sementara field Go-nya `int`. AutoMigrate
@@ -2249,9 +2249,30 @@ karenanya mengubahnya menjadi `bigint`, dan **nilai 78.50 tersimpan sebagai
 78**. Ini bukan hal baru — sudah begitu sejak v2 pertama dijalankan di basis
 data bersama.
 
-Mendeklarasikan `decimal` tanpa mengubah tipe field membuat seluruh jalur
-penilaian berhenti bekerja: driver mengembalikan `"75.00"` dan `Scan` ke `int`
-menolaknya. Perbaikan yang benar adalah mengubah keenam field menjadi `float64`
-beserta seluruh pemakainya — menyentuh submit, double checker, dan rekap — jadi
-perlu dikerjakan **terpisah dengan uji khusus jalur penilaian**. Dibiarkan apa
-adanya dan dicatat di kodenya, bukan ditambal setengah jalan.
+Kerugiannya ternyata bukan pemotongan biasa — **MySQL membulatkan, naik maupun
+turun.** Diverifikasi langsung: menulis 7,5 / 12,25 / 78,5 ke kolom `bigint`
+menghasilkan **8 / 12 / 79**; ke `decimal(5,2)` menghasilkan 7,50 / 12,25 /
+78,50. Nilai yang diberikan guru lewat v1 diubah v2 tanpa ada yang memintanya.
+
+**Yang dikerjakan.** Keenam field menjadi `float64` + `type:decimal(5,2)`.
+Aritmetika penilaian TIDAK diubah: perhitungan v2 tetap bilangan bulat dan
+dikonversi di batasnya (`float64(scoreData["score"].(int))`), sehingga submit,
+autosave, dan double checker berperilaku persis seperti sebelumnya. Yang
+berubah hanya tipe penyimpanan — dan karena itu pecahan yang **ditulis v1**
+selamat.
+
+Dua jalur penghitungan ulang esai ikut memakai `float64` (peta skor per soal
+dan totalnya), karena di situlah pembulatan menjadi permanen: hasilnya ditulis
+balik ke kolom nilai. `essay_score` tetap `int` mengikuti kolomnya di v1, tetapi
+**dibulatkan, bukan dipotong**.
+
+Nilai di PDF lembar jawaban dan rapor dicetak lewat `formatNilai`: bentuk
+terpendek yang masih tepat ("90", "7.5") — bukan `%d` yang menolak float, bukan
+pula `%.2f` yang menampilkan setiap nilai bulat sebagai "78.00".
+
+Drift skema terhadap v1 turun dari 9 kolom menjadi **3** (sisanya pelebaran
+`text` → `longtext` yang disengaja dan sekali jalan).
+
+Dijaga `nilai_pecahan_test.go` (menulis 7,5 lewat GORM dan membacanya kembali
+utuh) dan `TestFormatNilai`. Seluruh suite hijau, termasuk double checker,
+submit, timeout, dan AI scoring.
