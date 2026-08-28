@@ -30,85 +30,16 @@ if [ -z "${NODE_SITES:-}" ]; then
 fi
 
 NODE_VERSION="${NODE_VERSION:-22}"
-case "$NODE_VERSION" in
-  [0-9]|[0-9][0-9]) ;;
-  *) die "NODE_VERSION='${NODE_VERSION}' harus nomor mayor saja (contoh: 22)" ;;
-esac
 
 log "Node.js ${NODE_VERSION} — situs: $(echo "${NODE_SITES}" | tr ',' ' ')"
 
 # ── Pemasangan Node ────────────────────────────────────────────────────────
-# Paket `npm` bawaan Ubuntu 22.04 menarik Node 12.22 — di bawah syarat minimum
-# hampir semua kerangka yang masih dirawat (Next.js 16 butuh 20.9+). Kegagalannya
-# bukan "versi terlalu lama" yang jelas, melainkan galat sintaks di dalam
-# node_modules, yang terbaca seperti paketnya yang rusak.
-#
-# Keduanya juga BENTROK: paket nodejs dari NodeSource sudah memuat npm sendiri,
-# sedangkan paket `npm` Ubuntu bergantung pada nodejs versi lamanya. Yang lama
-# dicabut lebih dulu, bukan ditumpuk.
-node_major() {
-  command -v node >/dev/null 2>&1 || return 1
-  node -v 2>/dev/null | sed -n 's/^v\([0-9]\{1,\}\).*/\1/p'
-}
+# Isinya ada di install_node (lib.sh) karena skrip deploy aplikasi yang punya
+# langkah build sendiri memakainya juga — lihat repost-app/15-assets.sh. Di sini
+# kegagalannya fatal: tanpa Node tidak ada satu pun situs yang bisa dibangun.
+install_node "$NODE_VERSION" || die "gagal memasang Node.js ${NODE_VERSION}"
 
-current="$(node_major || true)"
-if [ "${current:-0}" = "$NODE_VERSION" ]; then
-  skip "Node.js $(node -v) & npm $(npm -v 2>/dev/null)"
-else
-  if [ -n "${current:-}" ]; then
-    log "Node terpasang v${current} — diganti ${NODE_VERSION}"
-  fi
-
-  # Hanya paket dari apt yang dicabut. Node yang dipasang lewat nvm atau tarball
-  # tidak tersentuh dpkg, dan mencabut apa pun di /usr/local dari skrip setup
-  # bukan wewenangnya.
-  if dpkg -s npm >/dev/null 2>&1 || dpkg -s nodejs >/dev/null 2>&1; then
-    log "mencabut nodejs/npm bawaan distro"
-    DEBIAN_FRONTEND=noninteractive apt-get purge -y -q npm nodejs >/dev/null 2>&1 || true
-    DEBIAN_FRONTEND=noninteractive apt-get autoremove -y -q >/dev/null 2>&1 || true
-  fi
-
-  apt_install curl ca-certificates gnupg
-
-  KEYRING=/usr/share/keyrings/nodesource.gpg
-  if [ ! -s "$KEYRING" ]; then
-    log "menambahkan repo NodeSource"
-    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
-      | gpg --dearmor -o "$KEYRING" \
-      || die "gagal mengambil kunci NodeSource"
-    chmod 644 "$KEYRING"
-  fi
-
-  # "nodistro" bukan salah ketik: NodeSource memakai satu suite untuk semua
-  # rilis Debian/Ubuntu, bukan per-codename seperti repo lain.
-  echo "deb [signed-by=${KEYRING}] https://deb.nodesource.com/node_${NODE_VERSION}.x nodistro main" \
-    > /etc/apt/sources.list.d/nodesource.list
-
-  repo_log="$(mktemp)"
-  if ! apt-get update >"$repo_log" 2>&1; then
-    sed 's/^/       /' "$repo_log"
-    rm -f "$repo_log"
-    die "apt-get update gagal setelah menambahkan NodeSource"
-  fi
-  rm -f "$repo_log"
-
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -q nodejs >/dev/null \
-    || die "gagal memasang nodejs ${NODE_VERSION}"
-  ok "Node.js $(node -v) & npm $(npm -v)"
-fi
-
-# ── Peringatan memori ──────────────────────────────────────────────────────
-# Build Next.js rutin memakan lebih dari 1GB. Di VPS kecil tanpa swap, kernel
-# mematikan prosesnya begitu saja — npm melaporkan "Killed" atau kode keluar
-# 137, tanpa menyinggung memori sama sekali.
-TOTAL_MB="$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)"
-SWAP_MB="$(awk '/SwapTotal/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)"
-if [ "$TOTAL_MB" -lt 2048 ] && [ "$SWAP_MB" -lt 1024 ]; then
-  warn "RAM ${TOTAL_MB}MB, swap ${SWAP_MB}MB — build bisa dimatikan kernel (exit 137)."
-  warn "  Tambahkan swap bila itu terjadi:"
-  warn "    sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile"
-  warn "    sudo mkswap /swapfile && sudo swapon /swapfile"
-fi
+warn_low_memory
 
 # ── Tulis ulang server block setelah build ─────────────────────────────────
 # site_docroot mendeteksi out/ dan dist/ dari ADA-TIDAKNYA index di dalamnya.

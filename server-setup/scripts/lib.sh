@@ -273,6 +273,22 @@ is_proxy_site() {
   return 1
 }
 
+# Port lokal tujuan proxy sebuah situs container, dari PROXY_PORTS di .env.
+#
+# Tanpa entri, situs container memakai bentuk DUA upstream milik Exam v2
+# (/api/ ke 8080, sisanya ke 3000). Bentuk itu dulunya satu-satunya, dan tetap
+# jadi bawaan supaya server yang sudah berjalan tidak berubah diam-diam saat
+# repo ini di-pull — tetapi ia salah untuk aplikasi mana pun yang mendengar di
+# SATU port, seperti backend FastAPI Kelas Junior di 8000.
+#
+# Kegagalannya kalau ditebak: permintaan ke /api/... diteruskan ke 8080 yang
+# tidak ada isinya, dan nginx menjawab 502 hanya untuk sebagian alamat. Situsnya
+# terbuka, halaman depannya normal, dan yang rusak cuma bagian yang paling
+# jarang dibuka lebih dulu.
+proxy_port() {
+  kv_lookup "$1" "${PROXY_PORTS:-}"
+}
+
 # Direktori yang HARUS disajikan nginx untuk sebuah situs.
 #
 # Menunjuk root ke akar repo adalah kesalahan yang menghasilkan dua akibat
@@ -309,14 +325,48 @@ site_docroot() {
 # Isi server block sebuah situs — bagian yang sama untuk HTTP maupun HTTPS.
 site_body() {
   local site="$1" php_sock="$2"
-  local docroot
+  local docroot port
   docroot="$(site_docroot "$site")"
 
   # Unggahan jawaban bergambar dan impor soal lewat di sini.
   echo "    client_max_body_size 32M;"
   echo ""
 
-  if is_proxy_site "$site"; then
+  port="$(proxy_port "$site")"
+  # Divalidasi di sini, bukan dibiarkan masuk ke berkas konfigurasi. Nilai yang
+  # bukan angka membuat `nginx -t` gagal untuk SELURUH server — situs lain yang
+  # tadinya sehat ikut tidak dimuat — dan pesan nginx menyebut baris proxy_pass,
+  # bukan .env yang sebenarnya salah.
+  if [ -n "$port" ]; then
+    case "$port" in
+      *[!0-9]*) die "PROXY_PORTS: port '$port' untuk situs '$site' bukan angka" ;;
+    esac
+  fi
+
+  if is_proxy_site "$site" && [ -n "$port" ]; then
+    # Aplikasi container yang mendengar di SATU port — seluruh permintaan
+    # diteruskan ke sana, tanpa memisahkan /api/. Backend Kelas Junior (FastAPI)
+    # menyajikan API, /docs, /admin, dan /media dari satu proses yang sama.
+    cat <<CONF
+    # ── Aplikasi container (127.0.0.1:${port}) ────────────────────────────
+    location / {
+        proxy_pass http://127.0.0.1:${port};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade           \$http_upgrade;
+        proxy_set_header Connection        "upgrade";
+        proxy_set_header Host              \$host;
+        # \$remote_addr, BUKAN \$proxy_add_x_forwarded_for — lihat alasannya
+        # pada blok dua-upstream di bawah.
+        proxy_set_header X-Real-IP         \$remote_addr;
+        proxy_set_header X-Forwarded-For   \$remote_addr;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+
+        proxy_read_timeout      300s;
+        proxy_send_timeout      300s;
+        proxy_request_buffering off;
+    }
+CONF
+  elif is_proxy_site "$site"; then
     cat <<CONF
     # ── API Go ────────────────────────────────────────────────────────────
     location /api/ {
@@ -455,6 +505,96 @@ CONF
   mv "$tmp" "$avail"
   chmod 644 "$avail"
   ok "server block $site → ${server_names}${cert:+ (HTTPS)}"
+}
+
+# Pasang Node.js versi mayor tertentu dari NodeSource.
+#
+#   install_node 22
+#
+# Dipakai 40-node.sh (build situs di NODE_SITES) dan skrip deploy aplikasi yang
+# punya langkah build sendiri (repost-app/15-assets.sh). Ditaruh di sini, bukan
+# disalin, karena tiga jebakannya sama di mana pun dan mahal untuk ditemukan
+# dua kali:
+#
+#   1. Paket `npm` bawaan Ubuntu 22.04 menarik Node 12.22 — di bawah syarat
+#      minimum hampir semua kerangka yang masih dirawat. Kegagalannya bukan
+#      "versi terlalu lama" yang jelas, melainkan galat sintaks di dalam
+#      node_modules, yang terbaca seperti paketnya yang rusak.
+#   2. Paket nodejs NodeSource sudah memuat npm sendiri dan BENTROK dengan
+#      paket `npm` Ubuntu. Yang lama dicabut lebih dulu, bukan ditumpuk.
+#   3. "nodistro" bukan salah ketik: NodeSource memakai satu suite untuk semua
+#      rilis Debian/Ubuntu, bukan per-codename seperti repo lain.
+#
+# Mengembalikan 1 bila gagal; pemanggilnya memutuskan apakah itu fatal.
+install_node() {
+  local want="$1" current keyring repo_log
+
+  case "$want" in
+    [0-9]|[0-9][0-9]) ;;
+    *) warn "NODE_VERSION='${want}' harus nomor mayor saja (contoh: 22)"; return 1 ;;
+  esac
+
+  current=""
+  if command -v node >/dev/null 2>&1; then
+    current="$(node -v 2>/dev/null | sed -n 's/^v\([0-9]\{1,\}\).*/\1/p')"
+  fi
+
+  if [ "${current:-0}" = "$want" ]; then
+    skip "Node.js $(node -v) & npm $(npm -v 2>/dev/null)"
+    return 0
+  fi
+
+  [ -n "$current" ] && log "Node terpasang v${current} — diganti ${want}"
+
+  # Hanya paket dari apt yang dicabut. Node yang dipasang lewat nvm atau tarball
+  # tidak tersentuh dpkg, dan mencabut apa pun di /usr/local dari skrip setup
+  # bukan wewenangnya.
+  if dpkg -s npm >/dev/null 2>&1 || dpkg -s nodejs >/dev/null 2>&1; then
+    log "mencabut nodejs/npm bawaan distro"
+    DEBIAN_FRONTEND=noninteractive apt-get purge -y -q npm nodejs >/dev/null 2>&1 || true
+    DEBIAN_FRONTEND=noninteractive apt-get autoremove -y -q >/dev/null 2>&1 || true
+  fi
+
+  apt_install curl ca-certificates gnupg
+
+  keyring=/usr/share/keyrings/nodesource.gpg
+  if [ ! -s "$keyring" ]; then
+    log "menambahkan repo NodeSource"
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+      | gpg --dearmor -o "$keyring" \
+      || { warn "gagal mengambil kunci NodeSource"; return 1; }
+    chmod 644 "$keyring"
+  fi
+
+  echo "deb [signed-by=${keyring}] https://deb.nodesource.com/node_${want}.x nodistro main" \
+    > /etc/apt/sources.list.d/nodesource.list
+
+  repo_log="$(mktemp)"
+  if ! apt-get update >"$repo_log" 2>&1; then
+    sed 's/^/       /' "$repo_log"
+    rm -f "$repo_log"
+    warn "apt-get update gagal setelah menambahkan NodeSource"
+    return 1
+  fi
+  rm -f "$repo_log"
+
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -q nodejs >/dev/null \
+    || { warn "gagal memasang nodejs ${want}"; return 1; }
+  ok "Node.js $(node -v) & npm $(npm -v)"
+}
+
+# Build Next.js/Vite rutin memakan lebih dari 1GB. Di VPS kecil tanpa swap,
+# kernel mematikan prosesnya begitu saja — npm melaporkan "Killed" atau kode
+# keluar 137, tanpa menyinggung memori sama sekali.
+warn_low_memory() {
+  local total swap
+  total="$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)"
+  swap="$(awk '/SwapTotal/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)"
+  [ "$total" -lt 2048 ] && [ "$swap" -lt 1024 ] || return 0
+  warn "RAM ${total}MB, swap ${swap}MB — build bisa dimatikan kernel (exit 137)."
+  warn "  Tambahkan swap bila itu terjadi:"
+  warn "    sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile"
+  warn "    sudo mkswap /swapfile && sudo swapon /swapfile"
 }
 
 # Nama database yang aman dipakai MySQL.

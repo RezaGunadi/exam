@@ -32,6 +32,11 @@ help:
 	@echo "  make status            Lihat keadaan sekarang"
 	@echo ""
 	@echo "Sesuaikan daftar situs, domain & database di .env (dibuat otomatis dari .env.example)."
+	@echo ""
+	@echo "Aplikasi dengan langkah deploy sendiri — masing-masing punya README:"
+	@echo "  exam-v1/     Laravel   ujian.kelasprivat.id"
+	@echo "  repost-app/  Laravel   repost.ragh.co.id      (build Vite, antrean, unggahan 200MB)"
+	@echo "  junior-app/  FastAPI   junior-app.ragh.co.id  (container; nginx & HTTPS dari sini)"
 
 env:
 	@if [ ! -f .env ]; then \

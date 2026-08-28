@@ -28,6 +28,21 @@ Internet ──▶ nginx host (80/443) ──┬──▶ /var/www/<situs>      
                 MySQL host (127.0.0.1:3306) ──▶ database terpisah per proyek
 ```
 
+Tidak semua situs di server ini dikelola dari `.env`. Aplikasi yang butuh
+langkah di luar "buat direktori dan tulis server block" punya direktori deploy
+sendiri:
+
+| Direktori | Aplikasi | Domain | Kenapa terpisah |
+|---|---|---|---|
+| `exam-v1/` | Laravel | ujian.kelasprivat.id | root `public/`, composer, penjadwal |
+| `repost-app/` | Laravel 12 | repost.ragh.co.id | + build Vite, unggahan 200MB, antrean |
+| `junior-app/` | FastAPI (container) | junior-app.ragh.co.id | database & `.env` sendiri, Python, compose |
+
+Dua yang pertama **tidak boleh** didaftarkan di `SITES`/`SITE_DOMAINS` — server
+block Laravel-nya akan ditimpa `sudo make nginx`. `junior-app` justru
+**harus** terdaftar (sebagai situs container); nginx dan HTTPS-nya memang diurus
+dari sini, hanya bagian aplikasinya yang tidak. Masing-masing punya README.
+
 Aplikasi berbasis container **tidak membuka port publik sendiri**. Mereka hanya
 mendengar di `127.0.0.1` dan diteruskan oleh nginx host. Alasannya:
 
@@ -50,6 +65,7 @@ kali dijalankan, dan tidak ikut ke git):
 | `PHP_VERSION` | Versi PHP untuk semua situs — dipasang & diaktifkan `sudo make php` |
 | `NODE_SITES`, `NODE_VERSION` | Situs yang harus di-`npm run build` di server, dan versi Node-nya |
 | `SITES` | Direktori `/var/www/<nama>` + server block + symlink |
+| `PROXY_SITES`, `PROXY_PORTS` | Situs yang dilayani container, dan port lokal masing-masing |
 | `SITE_DOMAINS` | `nama=domain` — mengisi `server_name` dan menentukan situs mana yang dapat HTTPS |
 | `SITE_REPOS` | `nama=url` — situs yang terdaftar akan **diklon dari git** |
 | `CF_ORIGIN_CA_KEY` | Origin CA Key Cloudflare — sertifikat diterbitkan sendiri, tanpa dashboard |
@@ -173,6 +189,74 @@ benar sejak awal dan tidak bergantung pada urutan sama sekali.
 Build yang gagal **tidak menghentikan setup** — sama seperti HTTPS. Situsnya
 menjawab 403 sampai berhasil, dan namanya disebut di akhir. Kode keluar 137 atau
 `Killed` berarti kehabisan memori, bukan kode yang salah; tambahkan swap.
+
+## Situs yang dilayani container
+
+Situs di `PROXY_SITES` tidak disajikan dari berkas. nginx hanya meneruskan
+permintaannya ke `127.0.0.1`, dan direktori `/var/www/<nama>` tidak dibuat sama
+sekali — kecuali bila ada entri `SITE_REPOS`, karena di sanalah
+`docker-compose.yml` berada.
+
+Port tujuannya ditentukan `PROXY_PORTS`:
+
+```bash
+PROXY_SITES=exam_v2,junior_app
+PROXY_PORTS=junior_app=8000
+```
+
+Situs **tanpa** entri di `PROXY_PORTS` memakai bentuk lama milik Exam v2: `/api/`
+diteruskan ke 8080 (API Go) dan sisanya ke 3000 (Next.js). Bentuk itu tetap jadi
+bawaan supaya server yang sudah berjalan tidak berubah diam-diam saat repo ini
+di-pull — tetapi ia **salah** untuk aplikasi yang mendengar di satu port saja.
+
+Kegagalannya kalau dibiarkan menebak tidak terlihat di halaman depan: situsnya
+terbuka normal, dan yang menjawab 502 hanya alamat di bawah `/api/` — yang pada
+backend Kelas Junior berarti seluruh isi aplikasinya.
+
+`PROXY_PORTS` yang belum ada di `.env` **ditambahkan otomatis** saat
+`sudo make nginx` dijalankan, dengan alasan yang sama seperti `PHP_VERSION`:
+`.env` dibuat sekali lalu tidak pernah disentuh lagi, sehingga variabel baru
+hasil `git pull` tidak akan pernah sampai ke server yang sudah berjalan.
+
+### Port container tidak pernah terbuka ke internet
+
+`ports: "8000:8000"` di sebuah `docker-compose.yml` **bukan** berarti localhost.
+Docker mengartikannya `0.0.0.0:8000` — aplikasi terjangkau langsung dari
+internet, tanpa HTTPS dan tanpa melewati nginx.
+
+Dan **ufw tidak menghalanginya**. Docker menulis aturan DNAT-nya sendiri di
+rantai yang diproses sebelum aturan ufw, sehingga `ufw deny 8000` tidak
+berpengaruh sementara `ufw status` tetap tampak meyakinkan. Kesalahan jenis ini
+tidak pernah muncul di log mana pun.
+
+`sudo make docker` menulis `/etc/docker/daemon.json`:
+
+```json
+{
+  "ip": "127.0.0.1",
+  "log-driver": "json-file",
+  "log-opts": { "max-size": "10m", "max-file": "5" }
+}
+```
+
+`"ip"` mengubah alamat **bawaan** untuk port yang dipublikasikan tanpa menyebut
+IP, sehingga arsitektur di atas berlaku secara bawaan alih-alih bergantung pada
+tiap compose file mengingatnya sendiri. Container yang memang perlu terbuka
+tetap bisa menulis `"0.0.0.0:port:port"` dengan sengaja.
+
+`log-opts` mengurus hal kedua yang tidak kalah diam: driver `json-file` bawaan
+tumbuh **tanpa batas**. Container yang menulis beberapa baris per detik memenuhi
+partisi dalam hitungan bulan — dan partisi penuh mematikan MySQL beserta seluruh
+situs di server ini.
+
+`daemon.json` yang **sudah ada tidak pernah ditimpa**; yang kurang hanya
+disebutkan agar ditambahkan sendiri. Menggabungkan JSON dengan aman butuh `jq`
+yang belum tentu ada, dan menimpa berkas yang disunting orang lebih buruk
+daripada memberi tahu.
+
+Perubahan ini baru berlaku setelah daemon di-restart, dan restart itu hanya
+dilakukan pada saat berkasnya baru ditulis — bukan tiap `make server`, karena
+restart menjatuhkan container yang sedang melayani.
 
 ## HTTPS
 

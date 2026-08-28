@@ -14,6 +14,15 @@ load_env "$(dirname "$SCRIPT_DIR")"
 require_root
 require_apt
 
+# .env dibuat sekali lalu tidak pernah disentuh lagi, jadi variabel baru hasil
+# `git pull` tidak akan pernah sampai ke server yang sudah berjalan. Untuk
+# PROXY_PORTS diamnya berbahaya: nilai kosong membuat SETIAP situs container
+# jatuh ke bentuk lama Exam v2 (/api/ → 8080, sisanya → 3000), sehingga
+# junior_app menjawab 502 pada seluruh alamat di bawah /api/ tanpa satu pun
+# baris error yang menyinggung .env.
+ensure_env_var "$(dirname "$SCRIPT_DIR")" PROXY_PORTS "junior_app=8000" \
+  "Port lokal tiap situs container: \"nama=port\". Kosong = bentuk lama Exam v2 (/api/ 8080, sisanya 3000)."
+
 log "nginx + PHP-FPM"
 
 # PHP_VERSION di .env adalah sumber kebenarannya. Paket meta TANPA versi

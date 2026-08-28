@@ -54,7 +54,69 @@ else
   apt_install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 fi
 
+# ── Kebijakan daemon: port container tidak pernah terbuka ke internet ──────
+#
+# `ports: "8000:8000"` di docker-compose.yml BUKAN berarti localhost. Docker
+# mengartikannya sebagai 0.0.0.0:8000 — aplikasi terjangkau langsung dari
+# internet, tanpa HTTPS dan tanpa melewati nginx.
+#
+# Dan ufw TIDAK menghalanginya. Docker menulis aturan DNAT-nya sendiri di
+# rantai nftables/iptables yang diproses SEBELUM aturan ufw, sehingga
+# `ufw deny 8000` tidak berpengaruh sementara `ufw status` tetap tampak
+# meyakinkan. Ini jenis kesalahan yang tidak pernah muncul di log mana pun.
+#
+# `"ip": "127.0.0.1"` mengubah alamat BAWAAN untuk port yang dipublikasikan
+# tanpa menyebut IP. Itu menjadikan arsitektur yang sudah ditulis di README —
+# nginx host satu-satunya pintu depan — berlaku secara bawaan, bukan
+# bergantung pada setiap compose file mengingatnya sendiri. Container yang
+# memang perlu terbuka tetap bisa menyebut "0.0.0.0:port:port" dengan sengaja.
+#
+# Sekalian rotasi log: driver json-file bawaan tumbuh TANPA BATAS. Container
+# yang menulis beberapa baris per detik memenuhi partisi dalam hitungan bulan,
+# dan partisi penuh mematikan MySQL beserta seluruh situs di server ini.
+DAEMON_JSON=/etc/docker/daemon.json
+DOCKER_NEEDS_RESTART=0
+
+if [ ! -f "$DAEMON_JSON" ]; then
+  mkdir -p /etc/docker
+  cat > "$DAEMON_JSON" <<'JSON'
+{
+  "ip": "127.0.0.1",
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "5"
+  }
+}
+JSON
+  chmod 644 "$DAEMON_JSON"
+  ok "daemon.json (port bawaan ke 127.0.0.1, log dirotasi)"
+  DOCKER_NEEDS_RESTART=1
+elif grep -q '"ip"[[:space:]]*:' "$DAEMON_JSON"; then
+  skip "daemon.json (\"ip\" sudah disetel)"
+else
+  # TIDAK ditimpa. Berkas ini bisa memuat pengaturan yang disunting orang, dan
+  # menggabungkan JSON dengan aman butuh jq yang belum tentu ada. Yang bisa
+  # dilakukan skrip adalah menyebutkan persis apa yang kurang.
+  warn "$DAEMON_JSON sudah ada tetapi tidak menyetel \"ip\"."
+  warn "  Port container akan dipublikasikan ke 0.0.0.0 — terbuka ke internet,"
+  warn "  dan ufw tidak menghalanginya. Tambahkan sendiri ke berkas itu:"
+  warn '    "ip": "127.0.0.1",'
+  warn '    "log-driver": "json-file",'
+  warn '    "log-opts": { "max-size": "10m", "max-file": "5" }'
+  warn "  lalu: sudo systemctl restart docker"
+fi
+
 systemctl enable --now docker >/dev/null 2>&1 || true
+
+# Restart HANYA bila daemon.json baru saja ditulis. Daemon membaca berkas itu
+# sekali saat start, jadi tanpa restart pengaturannya tidak berlaku sama sekali;
+# tetapi restart yang tidak perlu ikut menjatuhkan container yang sedang
+# melayani, dan itu harga yang tidak pantas dibayar tiap `make server`.
+if [ "$DOCKER_NEEDS_RESTART" -eq 1 ]; then
+  systemctl restart docker >/dev/null 2>&1 || true
+fi
+
 systemctl is-active --quiet docker || die "Docker tidak berjalan — periksa: journalctl -u docker -n 50"
 
 # Pengguna yang memanggil sudo dimasukkan ke grup docker agar tidak perlu sudo
