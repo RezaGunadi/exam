@@ -127,6 +127,68 @@ apt_install "${PKGS[@]}"
 FPM_UNIT="php${PHP_VERSION}-fpm.service"
 SOCK="/run/php/php${PHP_VERSION}-fpm.sock"
 
+# ── Berapa permintaan bisa dilayani BERSAMAAN ──────────────────────────────
+#
+# Ini plafon kapasitas yang sebenarnya, dan paling mudah terlewat karena tidak
+# muncul di uji beban mana pun.
+#
+# Bawaan Debian/Ubuntu adalah pm.max_children = 5. Artinya SELURUH server hanya
+# melayani lima permintaan PHP pada saat yang sama, berapa pun cepatnya tiap
+# permintaan. Uji beban aplikasi tidak akan pernah menunjukkannya: ia menempuh
+# kode dari dalam proses, bukan lewat PHP-FPM, jadi angkanya bagus sementara
+# server sungguhan sudah antre.
+#
+# Untuk lalu lintas ujian yang mantap, lima sebenarnya cukup — heartbeat 60
+# detik dan autosave 5 menit menghasilkan permintaan yang jarang dan pendek.
+# Yang menjatuhkannya adalah LONJAKAN dan permintaan LAMBAT:
+#   - satu kelas menekan "Mulai" bersamaan
+#   - unggahan foto proktor, yang lamanya ditentukan jaringan siswa
+# Lima unggahan lambat sudah cukup membuat seluruh situs berhenti menjawab,
+# termasuk siswa yang sedang menyimpan jawaban.
+#
+# Dihitung dari RAM yang benar-benar ada, seperti buffer pool MySQL: tiap
+# proses PHP memakai memori, dan menyetel 200 di mesin 2GB hanya memindahkan
+# kegagalan dari "antre" menjadi "kehabisan memori".
+POOL_CONF="/etc/php/${PHP_VERSION}/fpm/pool.d/zz-exam.conf"
+if [ -f "$POOL_CONF" ]; then
+  skip "pool PHP-FPM"
+else
+  TOTAL_MB="$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)"
+  if [ -n "${PHP_FPM_MAX_CHILDREN:-}" ]; then
+    MAX_CHILDREN="$PHP_FPM_MAX_CHILDREN"
+    warn "pm.max_children disetel manual: ${MAX_CHILDREN}"
+  else
+    # ~40MB per proses, memakai seperempat RAM. Konservatif dengan sengaja:
+    # MySQL sudah mengambil seperempat, dan sisanya untuk sistem serta
+    # container v2.
+    MAX_CHILDREN=$(( TOTAL_MB / 4 / 40 ))
+  fi
+  [ "$MAX_CHILDREN" -lt 10 ] && MAX_CHILDREN=10
+  [ "$MAX_CHILDREN" -gt 120 ] && MAX_CHILDREN=120
+
+  # MySQL max_connections = 300 (lihat 10-mysql.sh). Tiap proses PHP memegang
+  # satu koneksi, jadi plafon di sini harus tetap jauh di bawahnya — kalau
+  # tidak, kegagalannya berpindah ke "Too many connections", yang jauh lebih
+  # membingungkan daripada antrean.
+  cat > "$POOL_CONF" <<CONF
+; Ditulis oleh server-setup. RAM terdeteksi: ${TOTAL_MB}MB.
+;
+; Menimpa pm.* dari www.conf. Bawaan distro (5) menjadi plafon senyap bagi
+; seluruh situs saat ada lonjakan atau permintaan lambat.
+[www]
+pm = dynamic
+pm.max_children = ${MAX_CHILDREN}
+pm.start_servers = $(( MAX_CHILDREN / 4 + 1 ))
+pm.min_spare_servers = $(( MAX_CHILDREN / 8 + 1 ))
+pm.max_spare_servers = $(( MAX_CHILDREN / 2 + 1 ))
+; Proses didaur ulang berkala: kebocoran memori kecil di ekstensi pihak ketiga
+; menumpuk pada proses yang hidup berhari-hari.
+pm.max_requests = 500
+CONF
+  ok "pool PHP-FPM: pm.max_children = ${MAX_CHILDREN} (bawaan distro 5)"
+  systemctl restart "$FPM_UNIT" >/dev/null 2>&1 || true
+fi
+
 systemctl enable --now "$FPM_UNIT" >/dev/null 2>&1 || true
 
 # Socket baru muncul beberapa saat setelah layanannya start. Diperiksa berulang,

@@ -402,3 +402,46 @@ bila disuruh mendengar di alamat yang belum ada, jadi jembatannya harus lahir
 lebih dulu. `05-docker.sh` membuat jaringan `exam-v2` dengan subnet tetap
 (172.28.0.0/24) sebelum `10-mysql.sh` menentukan bind-address, dan
 `docker-compose.yml` proyek memakai ulang jaringan bernama sama.
+
+## Berapa siswa bisa ujian bersamaan?
+
+Uji beban aplikasi (`php artisan exam:stress`) mengukur **biaya per operasi**,
+bukan kapasitas bersamaan — ia menempuh kode dari dalam proses, bukan lewat
+PHP-FPM. Angkanya bisa sangat bagus sementara server sungguhan sudah antre.
+
+Contoh hasil nyata pada 500 siswa (11.200 permintaan, 0 galat):
+
+| Endpoint | p95 |
+|---|---|
+| heartbeat | 5,7 ms |
+| autosave | 8,2 ms |
+| start | 23 ms |
+| submit | 29 ms |
+
+Yang bisa disimpulkan: **biaya per permintaan bukan penghambatnya.** Dengan
+heartbeat tiap 60 detik dan autosave berkala tiap 5 menit, satu siswa hanya
+menghasilkan sekitar 0,03 permintaan/detik. Bahkan 5.000 siswa serentak hanya
+menghasilkan sekitar **satu permintaan yang sedang diproses** pada satu waktu.
+
+Yang TIDAK bisa disimpulkan dari angka itu, dan justru menjadi plafonnya:
+
+1. **`pm.max_children` PHP-FPM.** Bawaan distro adalah **5** — seluruh situs
+   hanya melayani lima permintaan PHP bersamaan. Lalu lintas mantap tidak
+   menyentuhnya, tetapi LONJAKAN dan permintaan LAMBAT menyentuhnya langsung:
+   satu kelas menekan "Mulai" berbarengan, atau lima unggahan foto proktor dari
+   jaringan siswa yang lambat, sudah cukup membuat seluruh situs berhenti
+   menjawab — termasuk siswa yang sedang menyimpan jawaban.
+   `15-php.sh` kini menyetelnya dari RAM yang ada.
+2. **`max_connections` MySQL** (disetel 300). Tiap proses PHP memegang satu
+   koneksi, jadi plafon FPM dijaga tetap jauh di bawahnya — kalau tidak,
+   kegagalannya berpindah menjadi "Too many connections", yang jauh lebih
+   membingungkan daripada antrean.
+
+Periksa keduanya dengan:
+
+```bash
+sudo make status
+```
+
+Bagian "Kapasitas permintaan bersamaan" menyebut angka yang sedang berlaku dan
+memperingatkan bila masih bawaan distro.

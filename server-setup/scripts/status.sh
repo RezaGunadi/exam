@@ -54,6 +54,32 @@ else
 fi
 
 echo ""
+echo "Kapasitas permintaan bersamaan:"
+# Plafon yang paling sering terlewat. Uji beban aplikasi menempuh kode dari
+# dalam proses, bukan lewat PHP-FPM, jadi angkanya tetap bagus sementara server
+# sungguhan sudah antre di bawah lonjakan.
+FPM_POOL="$(ls /etc/php/*/fpm/pool.d/*.conf 2>/dev/null || true)"
+if [ -n "$FPM_POOL" ]; then
+  MC="$(grep -h '^[[:space:]]*pm.max_children' $FPM_POOL 2>/dev/null | tail -1 | sed 's/.*=[[:space:]]*//' || true)"
+  if [ -n "$MC" ]; then
+    echo "  PHP-FPM pm.max_children : $MC"
+    if [ "$MC" -le 5 ] 2>/dev/null; then
+      echo "  -> Masih bawaan distro. Seluruh situs hanya melayani $MC permintaan"
+      echo "     PHP bersamaan; satu kelas menekan 'Mulai' berbarengan sudah cukup"
+      echo "     membuatnya antre. Jalankan 'sudo make php' untuk menyetelnya."
+    fi
+  else
+    echo "  PHP-FPM pm.max_children : (tidak terbaca)"
+  fi
+else
+  echo "  (PHP-FPM belum terpasang)"
+fi
+if command -v mysql >/dev/null 2>&1 && [ -n "${DB_USER:-}" ]; then
+  MAXC="$(mysql -u "$DB_USER" -p"${DB_PASSWORD:-}" -N -B -e "SELECT @@max_connections;" 2>/dev/null || true)"
+  [ -n "$MAXC" ] && echo "  MySQL max_connections   : $MAXC"
+fi
+
+echo ""
 echo "MySQL terjangkau dari container?"
 # Pertanyaan yang paling sering ditanyakan saat "API tidak bisa konek padahal
 # .env sudah benar", dan paling susah dijawab dengan menebak.
