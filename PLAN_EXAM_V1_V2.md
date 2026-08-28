@@ -23,16 +23,22 @@ Prinsip yang dipegang:
 |---|---|---|---|
 | 1 | Route uji beban ujian serentak | ✅ selesai | ✅ selesai |
 | 2 | Download QR buku error | ✅ selesai | ✅ selesai |
-| 3 | Harga buku, denda, hilang/ganti, kas masuk | belum ada | belum ada |
-| 4 | Tampilan v2 turun kelas dari v1 | — | perlu audit halaman per halaman |
+| 3 | Harga buku, denda, hilang/ganti, kas masuk | ✅ selesai | ✅ selesai |
+| 4 | Tampilan v2 turun kelas dari v1 | — | ✅ cacat terukur selesai; banding visual belum |
 | 5 | Preview soal: jawaban tak ter-highlight | ✅ selesai | ✅ selesai |
-| 6 | Tanda "ragu-ragu" per soal | belum ada | belum ada |
+| 6 | Tanda "ragu-ragu" per soal | ✅ selesai | ✅ selesai |
 | 7 | Waktu ujian berkoma | ✅ selesai | ✅ selesai |
-| 8 | Kamera default non-wajib | selalu wajib | selalu wajib |
+| 8 | Kamera default non-wajib | ✅ selesai | ✅ selesai |
 | 9 | Login scan kartu siswa (QR) | ✅ selesai | ✅ selesai |
-| 10 | Kategori buku | `books.category` string bebas | sama |
-| 11 | Dua eligibilitas berdiri sendiri (nilai / lembar jawaban) | satu flag `show_results` | sama + `includeAnswerKey` di-hardcode false |
-| 12 | Auto-submit kecurangan bisa dimatikan | selalu aktif | selalu aktif |
+| 10 | Kategori buku | ✅ selesai | ✅ selesai |
+| 11 | Dua eligibilitas berdiri sendiri (nilai / lembar jawaban) | ✅ selesai | ✅ selesai |
+| 12 | Auto-submit kecurangan bisa dimatikan | ✅ selesai | ✅ selesai |
+| 13–18 | Progress non-login, rekap tugas, kelas historis, rekap admin/guru, kelas per tahun, bulk edit siswa | ✅ selesai | ✅ selesai |
+
+Tabel ini sempat basi: item 3, 6, 8, 10, 11, dan 12 masih tertulis "belum ada"
+padahal bagian rinciannya di bawah sudah lama menandainya SELESAI. Ringkasan
+yang tidak diperbarui lebih buruk daripada tidak ada ringkasan — ia dibaca
+sebagai daftar kerja yang tersisa.
 
 ---
 
@@ -616,24 +622,54 @@ Lewat API sungguhan dengan backend hidup: dua kelas terkirim, kelas berisi 3
 siswa melaporkan 3, kelas kosong melaporkan 0 (bukan hilang). Suite backend
 hijau tiga kali berturut-turut; `eslint` 0 keluaran; `next build` sukses.
 
+### Lanjutan kedua — empat halaman terakhir dan pencarian yang berbohong
+
+**Empat halaman generik kini punya kolom bernama.** Bentuk datanya dibaca dari
+handler Go-nya, bukan ditebak:
+
+| Halaman | Kolom |
+|---|---|
+| `admin/reports` | Ujian, Jenis, Status, Mulai, Peserta, Rata-rata, Lulus, % Lulus |
+| `admin/reports-config` | Jenis konfigurasi, Kunci, Nilai, Keterangan, Aktif |
+| `tutor/subjects` | Nama, Kode, KKM, Aktif |
+| `owner/ads` | Judul, Status, Mulai, Selesai, Tautan, Video YouTube |
+
+**Nilai disajikan untuk manusia.** Tanggal ISO menjadi "12 Jun 2026 10.49";
+tahun 0001 dari `time.Time` bernilai nol dibaca sebagai kosong, bukan sebagai
+tanggal. Pecahan dipangkas dua desimal — rata-rata 40.849999999999994 tidak
+berarti apa-apa bagi pembacanya.
+
+**Pencarian daftar laporan pindah ke server.** `ResourcePage` mengambil SELURUH
+baris lalu menyaringnya di browser. Daftar laporan bertambah satu baris tiap
+ujian dan tidak pernah menyusut, jadi setelah beberapa tahun ajaran seluruh
+riwayat dikirim hanya untuk menampilkan 25 baris pertama. Yang lebih buruk:
+begitu daftarnya dipaginasi, kotak pencarian hanya menemukan yang kebetulan ada
+di halaman yang sedang dibuka — jawaban salah tanpa satu pun tanda.
+
+`ResourcePage` kini selalu mengirim `page`/`per_page`/`search`. Endpoint yang
+tidak mengenalnya mengabaikannya dan berperilaku persis seperti dulu; yang
+mengenalinya menjawab dengan `meta`, dan itulah tandanya paginasi sisi server
+berlaku — kendali halaman muncul dan penyaringan di browser dimatikan.
+
+Diuji dengan menaruh ujian yang dicari di halaman TERAKHIR, bukan sekadar
+memeriksa parameternya ada: terhadap kode sebelumnya, uji itu mengembalikan 25
+baris alih-alih 1.
+
+### Dua sisa yang ternyata sudah tertutup
+
+**Grade dan Kapasitas.** Catatan lama menyebut kolomnya tidak ada di skema v2.
+Itu keliru: kolomnya ADA di tabel `classes` dan dipakai v1 sejak lama — kedua
+versi berbagi database yang sama. Yang hilang hanya pembacaannya di model v2,
+dan sudah ditambahkan berikut `student_count` agregat.
+
+**Saringan lanjutan hasil ujian.** Rentang nilai, urutkan/arah, dan saring per
+kelas sudah ada di `admin/exam-results` v2, di antarmuka maupun di handler-nya.
+
 ### Yang MASIH tersisa
 
-**Empat halaman masih generik**: `admin/reports`, `admin/reports-config`,
-`tutor/subjects`, `owner/ads`. Bentuk datanya tidak saya ketahui dengan pasti,
-dan menebak nama kolom hanya akan memasang label yang salah. Keduanya kini
-setidaknya tidak lagi menampilkan `slug` dan `"true"`.
-
-**Grade dan Kapasitas tidak bisa ditampilkan v2** — kolomnya memang tidak ada
-di skema v2 (`classes` hanya punya id, school_id, name, slug, is_active).
-Menambahkannya adalah perubahan skema tersendiri, bukan perbaikan tampilan.
-
-**Saringan lanjutan v1 belum ada di v2**: rentang nilai, urutkan/arah, saring
-per kelas di daftar hasil ujian. `ResourcePage` hanya punya pencarian teks, dan
-pencarian itu berjalan **di browser atas data yang sudah dimuat seluruhnya** —
-untuk sekolah dengan ribuan baris, keduanya jadi masalah sekaligus.
-
-**Banding rasa berdampingan tetap belum dikerjakan.** Itu butuh melihat kedua
-aplikasi, dan tidak ada peramban di lingkungan ini.
+**Banding rasa berdampingan.** Itu butuh melihat kedua aplikasi berjalan, dan
+tidak ada peramban di lingkungan ini. Satu-satunya bagian Item 4 yang belum
+dikerjakan.
 
 ---
 
@@ -2147,3 +2183,75 @@ hidup: kirim, pisah ruang, kursor, moderasi berjejak, hapus kedua ditolak, dan
 ruang asing ditolak 403.
 
 `npx eslint src` → 0 keluaran; `npx next build` → "✓ Compiled successfully".
+
+
+---
+
+## Temuan lintas-item — bukan bagian dari 12 item, tetapi lebih berbahaya
+
+Tiga hal berikut ditemukan sambil mengerjakan item lain. Ketiganya tidak
+kelihatan dari fitur mana pun, dan ketiganya berpotensi menjatuhkan produksi.
+
+### A. `route:cache` gagal → rute baru menjawab 404 di server
+
+Gejalanya: `POST admin/library/resolve-borrower` menjawab **404** padahal
+rutenya ada di kode dan muncul di `route:list`.
+
+Sebabnya bukan pada rute itu. Dua rute memakai nama yang sama, dan
+`php artisan route:cache` menolaknya:
+
+```
+LogicException: Unable to prepare route [ujian.kelasprivat.id] for
+serialization. Another route has already been assigned name [landing].
+```
+
+Perintah itu gagal total, jadi deploy meninggalkan `bootstrap/cache/routes-*.php`
+yang **lama** — dan setiap rute yang ditambahkan sejak cache itu dibuat
+menjawab 404. Rutenya ada, terdaftar, dan tetap 404.
+
+Nama kembar juga merusak tanpa cache: saat nama bertabrakan yang menang adalah
+pendaftaran **terakhir**, sehingga `route('landing')` mengembalikan
+`/ujian.kelasprivat.id` dan setiap tautan "beranda" di seluruh situs menunjuk
+ke jalur itu, bukan ke `/`.
+
+Dua nama kembar dibereskan (`landing`, `questions.show`); URL keduanya
+dipertahankan agar tautan yang sudah beredar tidak mati.
+Dijaga `tests/rute-cache.test.php`.
+
+### B. AutoMigrate v2 mengubah 236 kolom milik v1 setiap boot
+
+v1 dan v2 memakai SATU basis data dan skemanya milik migrasi Laravel v1. Model
+v2 hanya menyebut sebagian tipe kolomnya, jadi GORM mengarang sisanya dan
+`AutoMigrate` menjalankan `ALTER TABLE` pada tabel produksi tiap kali API
+dinyalakan. Diukur dengan menyalin skema v1 ke basis data terpisah lalu
+membandingkan sebelum/sesudah: **236 kolom berubah tipe. Sekarang 9.**
+
+Yang paling berbahaya bukan jumlahnya:
+
+- Model menyebut `uniqueIndex` tanpa nama, GORM memakai nama karangannya
+  sendiri, tidak mengenali index v1 sebagai index yang sama, lalu mencoba
+  **menghapus** punya v1. MySQL menolak karena ada foreign key yang
+  membutuhkannya (Error 1553) dan API mati — pola yang sama persis dengan 502
+  pada `users.token`. Terjadi di `raport_settings` dan `library_settings`.
+- 86 kolom string tanpa `size`/`type` dibuat sebagai `longtext`. Pada kolom
+  ber-index MySQL menolak (Error 1170); **MariaDB menerimanya sambil membuang
+  index-nya, tanpa satu pun pesan.**
+- `user_absents.time`/`end_time` bertipe `TIME` di v1 tetapi diubah menjadi
+  `datetime(3)`.
+
+Dijaga `TestSetiapKolomStringMenyebutUkuran`.
+
+### C. Nilai pecahan siswa terpotong — BELUM diperbaiki
+
+Enam kolom nilai (`exam_results.score`, `student_answers.points_earned`, dll)
+bertipe `decimal(5,2)` di v1, sementara field Go-nya `int`. AutoMigrate
+karenanya mengubahnya menjadi `bigint`, dan **nilai 78.50 tersimpan sebagai
+78**. Ini bukan hal baru — sudah begitu sejak v2 pertama dijalankan di basis
+data bersama.
+
+Mendeklarasikan `decimal` tanpa mengubah tipe field membuat seluruh jalur
+penilaian berhenti bekerja: driver mengembalikan `"75.00"` dan `Scan` ke `int`
+menolaknya. Perbaikan yang benar adalah mengubah keenam field menjadi `float64`
+beserta seluruh pemakainya — menyentuh submit, double checker, dan rekap — jadi
+perlu dikerjakan **terpisah dengan uji khusus jalur penilaian**. Dibiarkan apa
+adanya dan dicatat di kodenya, bukan ditambal setengah jalan.
