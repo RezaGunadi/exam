@@ -96,7 +96,17 @@ phpmyadmin: nginx
 # nginx sebelum phpMyAdmin karena panel itu disajikan lewat nginx, node setelah
 # nginx karena repositorinya baru ada setelah diklon, dan SSL paling akhir
 # karena ia menulis ulang server block yang sudah jadi.
-server: preflight docker mysql nginx node phpmyadmin ssl
+#
+# `php` SEBELUM `nginx`, dan sebelumnya ia TIDAK ada di daftar ini sama
+# sekali. Akibatnya server baru berjalan dengan pool PHP-FPM bawaan distro:
+# pm.max_children = 5, artinya seluruh situs hanya melayani lima permintaan
+# PHP bersamaan. Itu tidak pernah terlihat di uji beban aplikasi — uji itu
+# menempuh kode dari dalam proses, bukan lewat PHP-FPM — jadi plafonnya
+# baru ketahuan saat satu kelas menekan "Mulai" berbarengan.
+#
+# Sebelum nginx karena 15-php.sh yang menambahkan repo dan memasang versi
+# PHP yang diminta; nginx lalu menunjuk ke socket yang sudah benar.
+server: preflight docker mysql php nginx node phpmyadmin ssl
 	@echo ""
 	@echo "Setup selesai — PERIKSA hasilnya, jangan berhenti di baris ini:"
 	@echo ""
