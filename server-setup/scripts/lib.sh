@@ -395,6 +395,21 @@ CONF
     }
 
     # ── Next.js ───────────────────────────────────────────────────────────
+    # ── Aset ber-hash Next.js ────────────────────────────
+    #
+    # Nama berkasnya memuat hash isinya, jadi isi baru selalu berarti nama
+    # baru. Aman disimpan selamanya, dan justru harus — tanpa ini tiap
+    # kunjungan mengunduh ulang seluruh bundel.
+    location /_next/static/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host              \$host;
+        proxy_set_header X-Real-IP         \$remote_addr;
+        proxy_set_header X-Forwarded-For   \$remote_addr;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 300s;
+    }
+
     location / {
         proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
@@ -405,6 +420,20 @@ CONF
         proxy_set_header X-Forwarded-For   \$remote_addr;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_read_timeout 300s;
+
+        # HTML TIDAK boleh disimpan lama, dan Next mengirimnya dengan
+        # `s-maxage=31536000` — satu tahun untuk cache bersama.
+        #
+        # Di belakang Cloudflare itu berarti halaman lama bisa terus disajikan
+        # jauh setelah deploy. Gejalanya paling menyesatkan yang ada: perbaikan
+        # sudah benar-benar terpasang di server, terverifikasi lewat curl, tapi
+        # yang membuka situs tetap melihat versi lama — dan tak ada satu pun
+        # log yang menunjukkan ada yang salah.
+        #
+        # Aset ber-hash TIDAK terkena aturan ini; ia punya location sendiri di
+        # atas, dan justru harus disimpan selamanya.
+        proxy_hide_header Cache-Control;
+        add_header Cache-Control "no-cache, must-revalidate" always;
     }
 CONF
   else
