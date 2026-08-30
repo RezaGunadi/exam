@@ -94,44 +94,14 @@ PHP_SOCK="$(find_php_sock || true)"
 PMA_PORT="${PMA_PORT:-8081}"
 
 AVAIL=/etc/nginx/sites-available/phpmyadmin
-if [ -f "$AVAIL" ]; then
-  skip "server block phpMyAdmin"
+if write_pma_conf "$PMA_DIR" "$PHP_SOCK"; then
+  if [ -n "${PMA_DOMAIN:-}" ]; then
+    ok "server block phpMyAdmin (${PMA_DOMAIN}${PMA_PORT:+ + port $PMA_PORT})"
+  else
+    ok "server block phpMyAdmin (port $PMA_PORT)"
+  fi
 else
-  cat > "$AVAIL" <<CONF
-# phpMyAdmin — port terpisah + basic auth.
-# Disarankan membatasi lebih lanjut ke IP Anda dengan allow/deny di bawah.
-server {
-    listen ${PMA_PORT};
-    listen [::]:${PMA_PORT};
-    server_name _;
-
-    root ${PMA_DIR};
-    index index.php;
-
-    # Batasi ke alamat tertentu bila perlu:
-    # allow 203.0.113.10;
-    # deny all;
-
-    auth_basic           "Area Terbatas";
-    auth_basic_user_file /etc/nginx/.htpasswd-pma;
-
-    client_max_body_size 256M;
-
-    location / {
-        try_files \$uri \$uri/ =404;
-    }
-
-    location ~ \.php\$ {
-        include snippets/fastcgi-php.conf;
-        fastcgi_pass unix:${PHP_SOCK};
-        fastcgi_read_timeout 300;
-    }
-
-    location ~ /(libraries|setup|templates)/ { deny all; }
-    location ~ /\. { deny all; }
-}
-CONF
-  ok "server block phpMyAdmin (port $PMA_PORT)"
+  skip "server block phpMyAdmin (sudah sesuai)"
 fi
 
 [ -L /etc/nginx/sites-enabled/phpmyadmin ] || ln -s "$AVAIL" /etc/nginx/sites-enabled/phpmyadmin

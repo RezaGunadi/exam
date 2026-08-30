@@ -691,3 +691,95 @@ CONF
     ok "blok penangkap default (Host tak dikenal ditutup)"
   fi
 }
+
+# Server block phpMyAdmin, ditulis ulang bila isinya berubah.
+#
+# Ada DI SINI, bukan di 30-phpmyadmin.sh, karena dua skrip memerlukannya:
+# 30-phpmyadmin.sh menulis versi HTTP-nya, dan 35-ssl.sh menulis ulang versi
+# HTTPS-nya setelah sertifikatnya terbit. Menyalin templatnya ke dua tempat
+# berarti satu di antaranya akan tertinggal saat yang lain diperbaiki.
+#
+# Argumen: dir php_sock [cert] [key]
+write_pma_conf() {
+  local dir="$1" php_sock="$2" cert="${3:-}" key="${4:-}"
+  local avail=/etc/nginx/sites-available/phpmyadmin
+  local domain="${PMA_DOMAIN:-}"
+  local port="${PMA_PORT:-8081}"
+  local tmp listen_block
+
+  # Port TETAP dibuka meski domainnya ada.
+  #
+  # Kalau DNS atau sertifikatnya bermasalah, satu-satunya cara masuk ke basis
+  # data adalah lewat port ini — dan itu justru saat paling dibutuhkan. Isi
+  # PMA_PORT dengan kosong bila memang ingin ditutup.
+  listen_block=""
+  if [ -n "$port" ]; then
+    listen_block="    listen ${port};
+    listen [::]:${port};
+"
+  fi
+
+  if [ -n "$domain" ]; then
+    listen_block="${listen_block}    listen 80;
+    listen [::]:80;
+"
+    if [ -n "$cert" ] && [ -n "$key" ]; then
+      listen_block="${listen_block}    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    ssl_certificate     ${cert};
+    ssl_certificate_key ${key};
+"
+    fi
+  fi
+
+  # server_name yang SPESIFIK bila ada domainnya. `_` pada port 80 akan
+  # menangkap permintaan untuk situs lain yang belum punya server block —
+  # pengunjung situs itu akan melihat halaman login basis data.
+  local names="_"
+  [ -n "$domain" ] && names="${domain//|/ }"
+
+  tmp="$(mktemp)"
+  cat > "$tmp" <<CONF
+# phpMyAdmin — dilindungi basic-auth SEBELUM permintaan sampai ke PHP.
+# Disarankan membatasi lebih lanjut ke IP Anda dengan allow/deny di bawah.
+server {
+${listen_block}    server_name ${names};
+
+    root ${dir};
+    index index.php;
+
+    # Batasi ke alamat tertentu bila perlu:
+    # allow 203.0.113.10;
+    # deny all;
+
+    auth_basic           "Area Terbatas";
+    auth_basic_user_file /etc/nginx/.htpasswd-pma;
+
+    client_max_body_size 256M;
+
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
+
+    location ~ \.php\$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:${php_sock};
+        fastcgi_read_timeout 300;
+    }
+
+    location ~ /(libraries|setup|templates)/ { deny all; }
+    location ~ /\. { deny all; }
+}
+CONF
+
+  # Ditulis ulang HANYA bila berubah. Menulis tiap kali membuat `make server`
+  # yang dijalankan ulang selalu tampak mengubah sesuatu, dan perubahan yang
+  # sungguhan jadi tenggelam di antaranya.
+  if [ -f "$avail" ] && cmp -s "$tmp" "$avail"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  mv "$tmp" "$avail"
+  return 0
+}

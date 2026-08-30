@@ -295,6 +295,33 @@ while read -r site; do
   fi
 done < <(split_csv "${SITES:-}")
 
+# phpMyAdmin ditangani TERPISAH dari perulangan di atas.
+#
+# write_site_conf memakai site_body(), yang mengasumsikan root di /var/www dan
+# tidak tahu apa-apa tentang basic-auth. phpMyAdmin punya root di
+# /usr/share/phpmyadmin dan HARUS tetap di balik basic-auth — memaksanya lewat
+# jalur situs biasa akan menghasilkan panel basis data tanpa kunci sama sekali.
+if [ "${PMA_ENABLE:-true}" = "true" ] && [ -n "${PMA_DOMAIN:-}" ]; then
+  pma_primary="${PMA_DOMAIN%%|*}"
+  pma_cert="${CERT_DIR}/${pma_primary}.pem"
+  pma_key="${CERT_DIR}/${pma_primary}.key"
+
+  CERT_FILE=""; KEY_FILE=""
+  if ensure_cert "$PMA_DOMAIN" "$pma_cert" "$pma_key"; then
+    PMA_DIR_SSL="${PMA_DIR:-/usr/share/phpmyadmin}"
+    if write_pma_conf "$PMA_DIR_SSL" "$PHP_SOCK" "$CERT_FILE" "$KEY_FILE"; then
+      ok "phpMyAdmin melayani HTTPS di ${pma_primary}"
+    else
+      skip "server block phpMyAdmin (sudah sesuai)"
+    fi
+    INSTALLED=$((INSTALLED + 1))
+  else
+    # Gagal di sini TIDAK menjatuhkan sisanya: server block HTTP-nya sudah
+    # ditulis 30-phpmyadmin.sh, dan portnya tetap bisa dipakai.
+    warn "sertifikat ${pma_primary} gagal — phpMyAdmin tetap lewat HTTP/port"
+  fi
+fi
+
 if [ "$INSTALLED" -eq 0 ]; then
   warn "tidak ada situs yang dipasangi HTTPS"
   exit 0
