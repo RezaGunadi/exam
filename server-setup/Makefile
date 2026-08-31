@@ -16,7 +16,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: help server preflight docker mysql php nginx node cloudflare ssl phpmyadmin status env
+.PHONY: help server preflight docker mysql php nginx node cloudflare ssl phpmyadmin status env brand-sync
 
 help:
 	@echo "Setup server — target yang tersedia:"
@@ -29,6 +29,7 @@ help:
 	@echo "  sudo make ssl          HTTPS: Origin Certificate + server block 443"
 	@echo "  sudo make cloudflare   Pulihkan IP asli di belakang proxy Cloudflare"
 	@echo "  sudo make phpmyadmin   phpMyAdmin saja"
+	@echo "  sudo make brand-sync   Domain branding premium: vhost + SSL otomatis"
 	@echo "  make status            Lihat keadaan sekarang"
 	@echo ""
 	@echo "Sesuaikan daftar situs, domain & database di .env (dibuat otomatis dari .env.example)."
@@ -91,6 +92,18 @@ ssl: nginx
 
 phpmyadmin: nginx
 	@bash scripts/30-phpmyadmin.sh
+
+# Penyelaras domain branding premium.
+#
+# TIDAK ikut dalam `make server`: ia me-reload nginx yang melayani seluruh situs
+# di mesin ini, termasuk v1, dan itu tidak pantas terjadi diam-diam di tengah
+# setup awal. Jalankan sendiri setelah SCHEDULER_TOKEN dan CF_ORIGIN_CA_KEY
+# terisi.
+#
+# Aman diulang: skripnya idempoten dan hanya menyentuh berkas berawalan
+# `brand-`.
+brand-sync: nginx
+	@bash scripts/45-brand-sync.sh
 
 # Urutannya penting: MySQL lebih dulu supaya phpMyAdmin punya yang dipantau,
 # nginx sebelum phpMyAdmin karena panel itu disajikan lewat nginx, node setelah

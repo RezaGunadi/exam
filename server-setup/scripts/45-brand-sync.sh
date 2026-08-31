@@ -12,13 +12,16 @@
 # menulis vhost dan memanggil certbot, jadi keduanya harus sudah ada.
 # ============================================================================
 set -euo pipefail
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
-. scripts/lib.sh
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh
+. "$SCRIPT_DIR/lib.sh"
+ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+load_env "$ROOT_DIR"
 
-need_root
-load_env
+require_root
 
-judul "Penyelaras domain branding premium"
+echo ""
+echo "── Penyelaras domain branding premium ──────────────────────────────────"
 
 TOKEN="${SCHEDULER_TOKEN:-}"
 if [ -z "$TOKEN" ]; then
@@ -29,17 +32,31 @@ if [ -z "$TOKEN" ]; then
   warn "  Isi SCHEDULER_TOKEN (sama dengan yang dipakai API), lalu jalankan ulang."
 fi
 
-install -m 0750 -o root -g root scripts/brand-sync.sh /usr/local/sbin/brand-sync.sh
-ok "/usr/local/sbin/brand-sync.sh"
+# KEDUANYA disalin: brand-sync.sh menyumber lib-cert.sh dari direktori yang
+# sama dengan dirinya. Menyalin satu saja membuat penyelarasnya gagal sejak
+# baris pertama, dengan pesan yang menyebut berkas yang tidak pernah ada.
+install -m 0750 -o root -g root "$SCRIPT_DIR/lib-cert.sh"   /usr/local/sbin/lib-cert.sh
+install -m 0750 -o root -g root "$SCRIPT_DIR/brand-sync.sh" /usr/local/sbin/brand-sync.sh
+ok "/usr/local/sbin/brand-sync.sh (+ lib-cert.sh)"
+
+if [ -z "${CF_ORIGIN_CA_KEY:-}" ]; then
+  warn "CF_ORIGIN_CA_KEY belum diisi — domain baru akan berhenti di status"
+  warn "  \"menunggu\" karena sertifikatnya tidak bisa diterbitkan."
+  warn "  Server block-nya tetap dipasang, jadi situsnya sudah bisa dibuka"
+  warn "  lewat Cloudflare mode Flexible sementara kuncinya menyusul."
+fi
 
 install -d -m 0750 /var/lib/brand-sync
 
 cat > /etc/default/brand-sync <<CONF
 # Dibaca systemd sebelum menjalankan brand-sync.
-# Berkas ini memuat token — izinnya sengaja 0640.
+# Berkas ini memuat DUA kredensial — izinnya sengaja 0640.
 API_BASE=${BRAND_SYNC_API_BASE:-http://127.0.0.1:8080}
 SCHEDULER_TOKEN=${TOKEN}
-CERTBOT_EMAIL=${CERTBOT_EMAIL:-${SSL_EMAIL:-}}
+# CF_ORIGIN_CA_KEY WAJIB diteruskan: penyelaras menerbitkan Cloudflare Origin
+# Certificate lewat lib-cert.sh, dan tanpa kunci ini setiap domain baru berhenti
+# di status "menunggu" tanpa sebab yang terlihat dari panel.
+CF_ORIGIN_CA_KEY=${CF_ORIGIN_CA_KEY:-}
 WEB_PORT=${BRAND_SYNC_WEB_PORT:-3000}
 API_PORT=${BRAND_SYNC_API_PORT:-8080}
 CONF
@@ -85,13 +102,15 @@ systemctl daemon-reload
 if [ -n "$TOKEN" ]; then
   systemctl enable --now brand-sync.timer >/dev/null 2>&1
   ok "timer brand-sync aktif (tiap 5 menit)"
-  info "Jalankan sekarang : systemctl start brand-sync"
-  info "Lihat hasilnya    : journalctl -u brand-sync -n 50 --no-pager"
+  echo "     Jalankan sekarang : systemctl start brand-sync"
+  echo "     Lihat hasilnya    : journalctl -u brand-sync -n 50 --no-pager"
 else
   systemctl disable --now brand-sync.timer >/dev/null 2>&1 || true
   skip "timer brand-sync (menunggu SCHEDULER_TOKEN)"
 fi
 
-info "Domain baru cukup diisi di panel owner; penyelaras yang memasang"
-info "vhost dan sertifikatnya. DNS domain itu harus sudah mengarah ke server"
-info "ini lebih dulu — certbot tidak bisa membuktikan kepemilikan tanpa itu."
+echo ""
+echo "     Domain baru cukup diisi di panel owner; penyelaras yang memasang"
+echo "     vhost dan sertifikatnya. Sertifikatnya bisa terbit SEBELUM DNS"
+echo "     diarahkan — Origin Certificate diterbitkan lewat API, bukan lewat"
+echo "     validasi HTTP."
