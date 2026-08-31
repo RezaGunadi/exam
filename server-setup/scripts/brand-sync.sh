@@ -11,11 +11,25 @@
 # MENGUMUMKAN domain mana yang seharusnya aktif; skrip ini yang menariknya lalu
 # mengerjakan nginx dan sertifikatnya.
 #
-# Setiap kali jalan:
-#   1. ambil daftar domain aktif dari API
-#   2. domain baru        -> terbitkan Origin Certificate, tulis vhost, aktifkan
-#   3. domain yang hilang -> nonaktifkan vhost (sertifikatnya DIBIARKAN)
-#   4. uji konfigurasi, reload, lalu laporkan hasilnya balik ke API
+# CARANYA MENGIKUTI SSL_METHOD, SAMA DENGAN 35-ssl.sh.
+#
+# Versi pertama skrip ini memaksa Cloudflare Origin Certificate. Di server ini
+# itu keliru: SSL_METHOD=letsencrypt, dan kesebelas situs yang sudah jalan
+# memakai /etc/letsencrypt. Domain branding akan menjadi satu-satunya yang
+# memakai cara berbeda — atau, kalau kunci API-nya kedaluwarsa, satu-satunya
+# yang tidak punya TLS sama sekali.
+#
+# URUTANNYA PENTING DAN TIDAK BOLEH DIBALIK:
+#
+#   1. tulis vhost HTTP saja, aktifkan, reload
+#   2. BARU minta sertifikat
+#   3. bila dapat, tulis ulang vhost lengkap dengan 443, reload lagi
+#
+# Let's Encrypt memverifikasi dengan MENGHUBUNGI domainnya di port 80. Tanpa
+# vhost yang sudah menjawab lebih dulu, verifikasinya jatuh ke situs lain yang
+# kebetulan menjadi server default — dan gagal terus tanpa sebab yang terlihat.
+# Urutan ini juga benar untuk Origin Certificate, yang terbit lewat API dan
+# tidak peduli pada urutan sama sekali.
 #
 # ATURAN YANG TIDAK BOLEH DILANGGAR:
 #   - `nginx -t` SELALU dijalankan sebelum reload. Konfigurasi tidak valid
@@ -23,9 +37,8 @@
 #     mati. Server tidak boleh pernah mati karena skrip ini.
 #   - Hanya berkas berawalan `brand-` yang disentuh. Situs utama tidak pernah
 #     ikut terhapus, betapa pun kacaunya daftar yang diterima.
-#   - Sertifikat TIDAK dihapus saat domain dilepas. Ia berlaku 15 tahun, tidak
-#     merugikan siapa pun bila menganggur, dan memasang ulang domain yang sama
-#     jadi seketika.
+#   - Sertifikat TIDAK dihapus saat domain dilepas. Memasang ulang domain yang
+#     sama jadi seketika, dan sertifikat menganggur tidak merugikan siapa pun.
 # ============================================================================
 set -euo pipefail
 
@@ -37,9 +50,12 @@ API_BASE="${API_BASE:-http://127.0.0.1:8080}"
 SCHEDULER_TOKEN="${SCHEDULER_TOKEN:-}"
 WEB_PORT="${WEB_PORT:-3000}"
 API_PORT="${API_PORT:-8080}"
+SSL_METHOD="${SSL_METHOD:-cloudflare}"
+CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
 AVAIL="/etc/nginx/sites-available"
 ENABLED="/etc/nginx/sites-enabled"
 CERT_DIR="/etc/ssl/cloudflare"
+STATE_DIR="/var/lib/brand-sync"
 PREFIX="brand-"
 
 log()  { printf '[brand-sync] %s\n' "$*"; }
@@ -50,6 +66,29 @@ die()  { printf '[brand-sync] GALAT: %s\n' "$*" >&2; exit 1; }
 command -v nginx >/dev/null || die "nginx tidak terpasang"
 command -v curl  >/dev/null || die "curl tidak terpasang"
 mkdir -p "$CERT_DIR"; chmod 700 "$CERT_DIR"
+mkdir -p "$STATE_DIR"; chmod 750 "$STATE_DIR"
+
+# Jeda setelah gagal. Timernya berdenyut tiap 5 menit; tanpa jeda, satu domain
+# yang DNS-nya belum diarahkan akan meminta sertifikat 288 kali sehari.
+#
+# Untuk Let's Encrypt itu bukan sekadar berisik: batasnya 5 kegagalan validasi
+# per host per jam, dan melewatinya memblokir domain itu berjam-jam — termasuk
+# saat DNS-nya akhirnya benar. Jedanya jauh lebih panjang daripada Cloudflare,
+# yang penerbitannya lewat API dan tidak punya batas serupa.
+if [ "$SSL_METHOD" = "letsencrypt" ]; then
+  JEDA_GAGAL=21600   # 6 jam
+else
+  JEDA_GAGAL=3600    # 1 jam
+fi
+
+boleh_coba_lagi() {
+  local penanda="${STATE_DIR}/$1.gagal" umur
+  [ -f "$penanda" ] || return 0
+  umur=$(( $(date +%s) - $(stat -c %Y "$penanda" 2>/dev/null || echo 0) ))
+  [ "$umur" -ge "$JEDA_GAGAL" ]
+}
+tandai_gagal()  { touch "${STATE_DIR}/$1.gagal"; }
+hapus_penanda() { rm -f "${STATE_DIR}/$1.gagal"; }
 
 lapor() {
   local domain="$1" status="$2" pesan="${3:-}"
@@ -72,14 +111,77 @@ uji_dan_reload() {
   systemctl reload nginx
 }
 
-punya_sertifikat() { [ -s "${CERT_DIR}/$1.pem" ] && [ -s "${CERT_DIR}/$1.key" ]; }
+# Lokasi sertifikat berbeda menurut caranya. Dipusatkan di sini supaya tidak
+# ada tempat lain yang menebak-nebak jalurnya.
+cert_pem() {
+  if [ "$SSL_METHOD" = "letsencrypt" ]; then
+    printf '/etc/letsencrypt/live/%s/fullchain.pem' "$1"
+  else
+    printf '%s/%s.pem' "$CERT_DIR" "$1"
+  fi
+}
+cert_key() {
+  if [ "$SSL_METHOD" = "letsencrypt" ]; then
+    printf '/etc/letsencrypt/live/%s/privkey.pem' "$1"
+  else
+    printf '%s/%s.key' "$CERT_DIR" "$1"
+  fi
+}
+punya_sertifikat() { [ -s "$(cert_pem "$1")" ] && [ -s "$(cert_key "$1")" ]; }
 
-# Vhost ditulis SETELAH sertifikatnya ada, dan langsung lengkap dengan blok
-# 443. Menulis blok 443 yang menunjuk berkas yang belum ada membuat nginx
-# menolak memuat seluruh konfigurasi.
+# Minta sertifikat Let's Encrypt untuk satu domain branding.
+#
+# `certonly`, bukan `--nginx` penuh: server block-nya ditulis skrip ini, dan
+# dua pihak yang menyunting berkas yang sama akan saling menimpa.
+#
+# www ikut disertakan dalam SATU sertifikat karena vhost-nya melayani keduanya;
+# tanpa itu pengunjung yang mengetik www menerima peringatan sertifikat. Bila
+# www-nya belum diarahkan, seluruh permintaan gagal — maka dicoba ulang tanpa
+# www, karena domain telanjang yang jalan jauh lebih baik daripada tidak sama
+# sekali.
+issue_letsencrypt_brand() {
+  local domain="$1" reg out
+  command -v certbot >/dev/null || { CERT_ERROR="certbot tidak terpasang di server"; return 1; }
+
+  if [ -n "$CERTBOT_EMAIL" ]; then
+    reg="-m $CERTBOT_EMAIL"
+  else
+    reg="--register-unsafely-without-email"
+  fi
+
+  # shellcheck disable=SC2086
+  if out="$(certbot certonly --nginx --non-interactive --agree-tos $reg \
+              -d "$domain" -d "www.$domain" 2>&1)"; then
+    return 0
+  fi
+  # shellcheck disable=SC2086
+  if out="$(certbot certonly --nginx --non-interactive --agree-tos $reg \
+              -d "$domain" 2>&1)"; then
+    warn "$domain: sertifikat terbit tanpa www (www belum diarahkan)"
+    return 0
+  fi
+  CERT_ERROR="$(printf '%s' "$out" | tail -3 | tr '\n' ' ')"
+  return 1
+}
+
+minta_sertifikat() {
+  local domain="$1"
+  CERT_ERROR=""
+  if [ "$SSL_METHOD" = "letsencrypt" ]; then
+    issue_letsencrypt_brand "$domain"
+  else
+    issue_origin_cert "$domain" "$(cert_pem "$domain")" "$(cert_key "$domain")"
+  fi
+}
+
+# Vhost ditulis dalam dua bentuk. Blok 443 hanya ditulis bila sertifikatnya
+# BENAR-BENAR ada di disk: menunjuk berkas yang belum ada membuat nginx menolak
+# memuat seluruh konfigurasinya, dan seluruh situs di server ini ikut mati.
 tulis_vhost() {
   local domain="$1" berkas="${AVAIL}/${PREFIX}$1"
-  local cert="${CERT_DIR}/${domain}.pem" key="${CERT_DIR}/${domain}.key"
+  local cert key
+  cert="$(cert_pem "$domain")"
+  key="$(cert_key "$domain")"
   {
     cat <<CONF
 # Dibuat otomatis oleh brand-sync.sh - JANGAN diubah tangan.
@@ -155,7 +257,7 @@ domains="$(printf '%s' "$respons" \
   | grep -oE '"domain"[[:space:]]*:[[:space:]]*"[^"]+"' \
   | sed -E 's/.*"([^"]+)"$/\1/' | sort -u || true)"
 
-log "domain aktif menurut API: $(printf '%s' "$domains" | grep -c . || true)"
+log "cara SSL: ${SSL_METHOD}; domain aktif menurut API: $(printf '%s' "$domains" | grep -c . || true)"
 
 berubah=0
 while IFS= read -r domain; do
@@ -164,29 +266,45 @@ while IFS= read -r domain; do
     *[!a-z0-9.-]*) warn "domain diabaikan (karakter tidak sah): $domain"; continue ;;
   esac
 
-  if ! punya_sertifikat "$domain"; then
-    log "$domain: menerbitkan Origin Certificate"
-    CERT_ERROR=""
-    if issue_origin_cert "$domain" "${CERT_DIR}/${domain}.pem" "${CERT_DIR}/${domain}.key"; then
-      lapor "$domain" "aktif" "Origin Certificate terbit, berlaku 15 tahun"
-    else
-      # Vhost HTTP tetap dipasang: situsnya sudah bisa dibuka lewat Cloudflare
-      # (mode Flexible) sementara sertifikat origin-nya menyusul.
-      lapor "$domain" "menunggu" "${CERT_ERROR:-sertifikat belum terbit - periksa CF_ORIGIN_CA_KEY}"
-      warn "$domain: sertifikat belum terbit"
-    fi
-  fi
-
-  berkas="${AVAIL}/${PREFIX}${domain}"
+  # LANGKAH 1 — vhost HTTP lebih dulu, supaya tantangan Let's Encrypt punya
+  # yang menjawab di port 80. Selalu ditulis ulang: isinya ikut berubah begitu
+  # sertifikatnya ada.
   tulis_vhost "$domain"
-
   if [ ! -L "${ENABLED}/${PREFIX}${domain}" ]; then
-    ln -sf "$berkas" "${ENABLED}/${PREFIX}${domain}"
+    ln -sf "${AVAIL}/${PREFIX}${domain}" "${ENABLED}/${PREFIX}${domain}"
   fi
   berubah=1
 
   if punya_sertifikat "$domain"; then
+    hapus_penanda "$domain"
     lapor "$domain" "aktif" "sertifikat terpasang"
+    continue
+  fi
+
+  if ! boleh_coba_lagi "$domain"; then
+    log "$domain: percobaan terakhir gagal, menunggu jeda"
+    continue
+  fi
+
+  # LANGKAH 2 — vhost-nya harus sudah hidup sebelum sertifikat diminta.
+  if ! uji_dan_reload; then
+    die "konfigurasi tidak valid - nginx TIDAK di-reload, perbaiki dulu"
+  fi
+  berubah=0
+
+  log "$domain: meminta sertifikat"
+  if minta_sertifikat "$domain"; then
+    hapus_penanda "$domain"
+    # LANGKAH 3 — tulis ulang, sekarang lengkap dengan blok 443.
+    tulis_vhost "$domain"
+    berubah=1
+    lapor "$domain" "aktif" "sertifikat terbit"
+  else
+    tandai_gagal "$domain"
+    # Situsnya TETAP bisa dibuka lewat HTTP sementara sertifikatnya menyusul,
+    # jadi ini "menunggu", bukan "gagal".
+    lapor "$domain" "menunggu" "${CERT_ERROR:-sertifikat belum terbit - periksa apakah DNS sudah mengarah ke server ini}"
+    warn "$domain: sertifikat belum terbit, dicoba lagi setelah $((JEDA_GAGAL / 3600)) jam"
   fi
 done <<< "$domains"
 

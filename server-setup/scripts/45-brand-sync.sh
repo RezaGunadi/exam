@@ -20,6 +20,14 @@ load_env "$ROOT_DIR"
 
 require_root
 
+# Diperiksa di sini, bukan lewat prasyarat `make nginx` - target itu menulis
+# ulang seluruh vhost di mesin ini, dan itu jauh lebih besar daripada yang
+# diminta orang yang mengetik `make brand-sync`.
+if ! command -v nginx >/dev/null 2>&1; then
+  echo "nginx belum terpasang - jalankan \`make nginx\` lebih dulu." >&2
+  exit 1
+fi
+
 echo ""
 echo "── Penyelaras domain branding premium ──────────────────────────────────"
 
@@ -39,7 +47,12 @@ install -m 0750 -o root -g root "$SCRIPT_DIR/lib-cert.sh"   /usr/local/sbin/lib-
 install -m 0750 -o root -g root "$SCRIPT_DIR/brand-sync.sh" /usr/local/sbin/brand-sync.sh
 ok "/usr/local/sbin/brand-sync.sh (+ lib-cert.sh)"
 
-if [ -z "${CF_ORIGIN_CA_KEY:-}" ]; then
+if [ "${SSL_METHOD:-cloudflare}" = "letsencrypt" ]; then
+  echo "     Sertifikat lewat Let's Encrypt, mengikuti SSL_METHOD di .env."
+  echo "     Domainnya HARUS sudah mengarah ke server ini sebelum sertifikatnya"
+  echo "     bisa terbit - Let's Encrypt memverifikasi dengan menghubunginya"
+  echo "     dari luar. Sebelum itu, situsnya sudah bisa dibuka lewat HTTP."
+elif [ -z "${CF_ORIGIN_CA_KEY:-}" ]; then
   warn "CF_ORIGIN_CA_KEY belum diisi — domain baru akan berhenti di status"
   warn "  \"menunggu\" karena sertifikatnya tidak bisa diterbitkan."
   warn "  Server block-nya tetap dipasang, jadi situsnya sudah bisa dibuka"
@@ -57,6 +70,13 @@ SCHEDULER_TOKEN=${TOKEN}
 # Certificate lewat lib-cert.sh, dan tanpa kunci ini setiap domain baru berhenti
 # di status "menunggu" tanpa sebab yang terlihat dari panel.
 CF_ORIGIN_CA_KEY=${CF_ORIGIN_CA_KEY:-}
+# SSL_METHOD WAJIB diteruskan dan harus sama dengan yang dipakai 35-ssl.sh.
+# Bawaan brand-sync adalah "cloudflare"; bila server ini sebenarnya memakai
+# letsencrypt, domain branding akan menjadi satu-satunya yang dicoba dengan
+# cara berbeda - dan bila kunci API-nya kosong, satu-satunya yang tidak punya
+# TLS sama sekali.
+SSL_METHOD=${SSL_METHOD:-cloudflare}
+CERTBOT_EMAIL=${CERTBOT_EMAIL:-}
 WEB_PORT=${BRAND_SYNC_WEB_PORT:-3000}
 API_PORT=${BRAND_SYNC_API_PORT:-8080}
 CONF
@@ -111,6 +131,8 @@ fi
 
 echo ""
 echo "     Domain baru cukup diisi di panel owner; penyelaras yang memasang"
-echo "     vhost dan sertifikatnya. Sertifikatnya bisa terbit SEBELUM DNS"
-echo "     diarahkan — Origin Certificate diterbitkan lewat API, bukan lewat"
-echo "     validasi HTTP."
+echo "     vhost dan sertifikatnya."
+if [ "${SSL_METHOD:-cloudflare}" != "letsencrypt" ]; then
+  echo "     Sertifikatnya bisa terbit SEBELUM DNS diarahkan - Origin"
+  echo "     Certificate diterbitkan lewat API, bukan lewat validasi HTTP."
+fi

@@ -102,7 +102,13 @@ phpmyadmin: nginx
 #
 # Aman diulang: skripnya idempoten dan hanya menyentuh berkas berawalan
 # `brand-`.
-brand-sync: nginx
+#
+# TIDAK bergantung pada target `nginx`, meski jelas membutuhkannya. Target itu
+# menulis ulang SELURUH vhost di mesin ini; menjadikannya prasyarat berarti
+# "pasang timer branding" diam-diam membangun ulang konfigurasi semua situs.
+# Skripnya memeriksa keberadaan nginx sendiri dan berhenti dengan pesan jelas
+# bila belum ada.
+brand-sync:
 	@bash scripts/45-brand-sync.sh
 
 # Urutannya penting: MySQL lebih dulu supaya phpMyAdmin punya yang dipantau,
