@@ -12,7 +12,11 @@ dicek.
 
 ## BELUM — disusun dari yang paling saya dahulukan
 
-**Urutan UI mengikuti permintaan Anda: halaman TANPA LOGIN lebih dulu.**
+**Urutan baru mengikuti permintaan Anda (2 September): UI/UX lebih dulu,
+fitur belakangan** — supaya fitur tidak dibangun di atas tampilan yang masih
+akan berubah, lalu dikerjakan dua kali.
+
+**Di dalam UI, halaman TANPA LOGIN tetap lebih dulu.**
 Halaman itu dilihat orang yang belum tentu jadi pelanggan, dan kesan
 pertamanya tidak bisa diulang — sementara layar setelah login dilihat orang
 yang sudah memakai sistemnya setiap hari dan sudah terbiasa.
@@ -41,47 +45,45 @@ Dua akar, keduanya terukur: `.inline-alert` adalah flex baris yang memuat
 tombol berlebar 100% (kali **ketiga** aturan itu menyebabkan luapan), dan
 `.shell` memakai `1fr` alih-alih `minmax(0, 1fr)`.
 
-### 1. `lms.kelasprivat.id` menyajikan situs orang lain
-- [ ] Blok server 443 untuk `lms.kelasprivat.id`
-- [ ] Halaman depan bervarian LMS
+### ✅ 3. `lms.kelasprivat.id` — SELESAI 2 September
+- [x] Blok server 443 + sertifikat sendiri
+- [x] Halaman depan bervarian LMS
+- [x] Warna varian berlaku **setelah login** juga (admin, guru, siswa)
 
-Hari ini domain itu membuka **"STN Smart System"** — aplikasi milik orang lain.
-Sebabnya sama persis seperti yang sudah dua kali terjadi (`db.kelasprivat.id`
-dan domain brand): tidak ada blok 443 untuk namanya, jadi nginx menyajikan blok
-443 pertama yang ada.
+Domain itu sebelumnya membuka **"STN Smart System"** — aplikasi milik orang
+lain — karena tidak ada blok 443 untuk namanya, jadi nginx menyajikan blok 443
+pertama yang ada. Sebab yang sama sudah dua kali terjadi (`db.kelasprivat.id`
+dan domain brand).
 
-**Didahulukan karena ini satu-satunya butir yang sedang salah menampilkan
-sesuatu kepada publik.** DNS Anda sudah mengarah, dan resepnya sudah terbukti
-dua kali — tinggal dijalankan. Pustaka variannya (`src/lib/varian-situs.ts`)
-sudah dibuat; halaman depannya belum.
+Wajah LMS membuka dengan **modul** (kelas, materi, tugas, absensi,
+perpustakaan, raport); wajah ujian tetap membuka dengan fitur ujian. Bagiannya
+satu, ditempatkan di dua posisi — bukan digandakan.
 
-### 2. Tanda tangan kepala sekolah tidak punya isian
-- [ ] Isian unggah tanda tangan di `/admin/school`
+Paletnya berbeda sampai ke dalam: `#12403a` hijau-teal untuk LMS, `#0c2947`
+biru tua untuk ujian, dipasang di layout akar sehingga mengenai semua layar.
+Urutan yang menang: **warna sekolah > palet varian > palet induk**.
 
-Kolom `schools.signature_image` **sudah ada**, dan **4 sekolah sudah
-mengisinya** — lewat v1. Di v2 tidak ada satu pun isian untuk itu, jadi sekolah
-yang pindah ke v2 tidak bisa mengganti atau memasangnya.
+Dijaga `uji-varian-situs.mjs` dan `uji-warna-brand.mjs` (110 pemeriksaan, 2
+varian). Keduanya sudah dibuktikan **gagal** ketika variannya dilepas dan
+ketika paletnya disamakan — dua kegagalan yang sebelumnya tidak bersuara.
 
-Didahulukan karena datanya sudah ada dan yang kurang hanya satu isian:
-pekerjaan kecil dengan akibat yang sudah nyata.
+---
 
-### 3. Rich text untuk isi cerita/stimulus
+## BELUM — UI/UX (dikerjakan lebih dulu)
+
+### 1. Rich text untuk isi cerita/stimulus
 - [ ] Penyunting rich text di `/admin/question-stories`
 
 Isinya tersimpan sebagai HTML tetapi disunting di textarea polos, sehingga guru
 melihat `<div>`, `&nbsp;`, dan `</div>` bercampur teks soal. Setiap
 penyuntingan berisiko merusak markup yang sudah ada.
 
-### 4. Tambah/hapus kategori buku pindah ke owner
-- [ ] `POST` dan `DELETE` kategori dibatasi owner
-- [ ] Layar pengelolaan kategori di panel owner
-- [ ] Layar admin menjadi baca-saja
+**Didahulukan di antara butir UI** karena ini satu-satunya yang sedang
+menampilkan sesuatu yang salah kepada pengguna, dan karena penyuntingnya
+adalah komponen yang akan dipakai layar lain — dibuat belakangan berarti layar
+yang sudah jadi harus dibongkar lagi.
 
-Kategori **per sekolah** (669 baris di produksi), dan jalur "Lainnya" saat input
-buku memakai kode yang **terpisah** (`resolveBookCategory`) — jadi membatasi
-endpoint kategori tidak akan mematahkannya. Sudah diverifikasi.
-
-### 5. Sisa select yang belum bisa dicari
+### 2. Sisa select yang belum bisa dicari
 - [ ] 22 select tersisa
 
 Turun dari 37. Yang tersisa berisi daftar pendek — tahun ajaran, semester, jenis
@@ -89,7 +91,35 @@ pembayaran perpustakaan, daftar kamera. `PilihCari` sudah menyesuaikan diri (di
 bawah sembilan pilihan ia tidak menampilkan kotak ketik), jadi mengubahnya aman
 kapan saja dan hanya soal keseragaman tampilan, bukan fungsi.
 
-**Ditaruh terakhir karena tidak ada yang rusak** — hanya belum seragam.
+### 3. Aksesibilitas layar ujian
+- [ ] Belum pernah diperiksa sama sekali
+
+Layar yang **paling lama dipakai siswa**, dan satu-satunya yang tidak bisa
+ditinggalkan di tengah jalan. Dipindahkan ke sini dari daftar "belum pernah
+disapu" karena ini pekerjaan UI, bukan celah teknis.
+
+---
+
+## BELUM — fitur (setelah UI beres)
+
+### 4. Tanda tangan kepala sekolah tidak punya isian
+- [ ] Isian unggah tanda tangan di `/admin/school`
+
+Kolom `schools.signature_image` **sudah ada**, dan **4 sekolah sudah
+mengisinya** — lewat v1. Di v2 tidak ada satu pun isian untuk itu, jadi sekolah
+yang pindah ke v2 tidak bisa mengganti atau memasangnya.
+
+Pekerjaan kecil dengan akibat yang sudah nyata, tetapi ditaruh setelah UI
+sesuai permintaan Anda.
+
+### 5. Tambah/hapus kategori buku pindah ke owner
+- [ ] `POST` dan `DELETE` kategori dibatasi owner
+- [ ] Layar pengelolaan kategori di panel owner
+- [ ] Layar admin menjadi baca-saja
+
+Kategori **per sekolah** (669 baris di produksi), dan jalur "Lainnya" saat input
+buku memakai kode yang **terpisah** (`resolveBookCategory`) — jadi membatasi
+endpoint kategori tidak akan mematahkannya. Sudah diverifikasi.
 
 ---
 
@@ -174,4 +204,22 @@ Bukan permintaan, tetapi celah yang saya ketahui:
 
 - [ ] Pembatasan laju di luar login, pendaftaran, dan cek nilai
 - [ ] Validasi unggahan di luar logo brand — yang lain masih percaya ekstensi berkas
-- [ ] Aksesibilitas layar ujian — layar yang paling lama dipakai siswa, belum pernah diperiksa
+
+(Aksesibilitas layar ujian dipindahkan ke daftar UI di atas.)
+
+---
+
+## Di luar lingkup v1/v2 — ditemukan, tidak saya sentuh
+
+Muncul saat memeriksa galat produksi atas pertanyaan Anda. **Bukan v1, bukan
+v2**, jadi saya laporkan tanpa mengubah apa pun:
+
+- [ ] `kelasprivat.id` — halaman `/les-<mapel>-<kota>` membalas **HTTP 500**,
+      23 kali dalam 4 jam, termasuk kepada perayap Meta dan pengunjung yang
+      datang dari halaman depan situs itu sendiri.
+      Sebabnya: baris `seo_pages` dibuat saat halaman pertama kali dibuka,
+      tetapi `INSERT`-nya tidak mengisi kolom `content` yang tidak punya nilai
+      bawaan — MySQL 1364. Situs Laravel terpisah di
+      `/var/www/company-kelasprivat`.
+- [ ] Log situs itu **127 MB** dan tidak dirotasi. Disk server 79% terpakai
+      (14 GB sisa) — server yang sama menjalankan v1 dan v2.
