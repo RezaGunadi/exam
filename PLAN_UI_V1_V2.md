@@ -105,12 +105,34 @@ Berlaku untuk setiap butir, tanpa kecuali:
 
 ## Antrean
 
-### 1. `admin/students` — rasio 0.43, selisih terbesar
-Blade v1: `admin/students/index` (49 kendali). Periksa: kolom tabel, saringan,
-tindakan massal, impor/ekspor, pratinjau pembaruan massal.
+### ✅ 1. `admin/students` — SELESAI
+Ketiga jalur impor v1 (siswa, sandi massal, pembaruan massal) beserta tabel
+kegagalannya **sudah ada** di v2. Yang belum terbawa: saringan **jenis
+kelamin** dan **pengurutan** (kolom + arah).
 
-### 2. `admin/reports` — 0.61
-Blade v1: `admin/reports/index` + `export` + `student`.
+Backend ternyata sudah menerima `gender` dan `sort_by` sejak awal — frontend
+tidak pernah mengirimnya. Ditambah `sort_order` dan kolom `email`.
+
+Klausa ORDER BY dipisahkan jadi `urutanSiswa()` agar bisa diuji: isinya dari
+masukan pemakai dan masuk ke SQL apa adanya. Ujinya memeriksa bahwa
+`name; DROP TABLE users`, `users.id`, dan `name)--` semuanya jatuh ke bawaan.
+
+### ✅ 2. `admin/reports` — SELESAI, dan temuannya jauh lebih besar
+Yang dicari saringan kelas. Yang ditemukan: **layar Laporan mengembalikan nol
+baris sejak awal** — `reportExamQuery` menyaring `exams.status = "completed"`,
+dan status itu **tidak pernah ada**. Produksi hanya punya draft (178),
+published (99), cancelled (22); tidak ada kode di v1 maupun v2 yang pernah
+menyetelnya.
+
+**Berlaku di v1 juga** — kuerinya dipindahkan apa adanya berikut cacatnya.
+
+Diganti definisi dari maksudnya: yang dilaporkan adalah ujian yang **punya
+hasil**. Di produksi: **271 ujian, dari 0**. Ditambah saringan kelas lewat
+subkueri (EXISTS, bukan JOIN — satu ujian punya puluhan hasil).
+
+### ✅ 7. `admin/subjects` — SELESAI
+KKM ditampilkan di daftar. v1 punya, dan `createHint` v2 pun menyebutnya —
+hanya daftar kolomnya yang melewatkan.
 
 ### 3. `admin/payment` — 0.62
 Blade v1: `admin/payment/index`. Sebagian sudah dikerjakan (DP, kuitansi DP,
@@ -122,8 +144,6 @@ bukti pelunasan) — periksa sisanya.
 
 ### 6. `admin/attempt-management` — 0.82
 Baru saja diperbaiki (nama siswa/ujian, kolom email). Periksa ulang.
-
-### 7. `admin/subjects` — KKM hilang dari daftar (di luar urutan rasio)
 
 ### 8. `admin/exam-results` — 0.96
 
