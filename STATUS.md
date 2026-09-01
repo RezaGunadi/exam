@@ -67,6 +67,32 @@ Dijaga `uji-varian-situs.mjs` dan `uji-warna-brand.mjs` (110 pemeriksaan, 2
 varian). Keduanya sudah dibuktikan **gagal** ketika variannya dilepas dan
 ketika paletnya disamakan — dua kegagalan yang sebelumnya tidak bersuara.
 
+### ✅ 4. Siswa tidak melihat gambar soal — SELESAI 2 September
+- [x] Teks soal dirender sebagai HTML, bukan teks polos
+- [x] Opsi jawaban ikut (479 set ber-HTML)
+- [x] Pembersih HTML dengan daftar-putih dari sensus isi produksi
+- [x] `student_text` (jawaban esai siswa) tidak lagi dirender mentah
+- [x] JSON-LD lewat `jsonUntukScript()`
+
+**Ditemukan saat menyurvei butir rich text, bukan dilaporkan.** Layar ujian
+merender `question_text` sebagai teks polos, jadi yang dibaca siswa adalah
+
+    Look at the picture below!<div><br></div><div><img src="https://asset...
+
+tanpa gambarnya. Di produksi **4.797 dari 5.417 soal berisi HTML** dan **3.184
+memuat `<img>`**. v1 merendernya sebagai HTML, jadi soal yang sama tampil benar
+di v1 dan rusak di v2 — dengan basis data yang sama.
+
+Sekalian: `review.student_text` — jawaban esai yang diketik **siswa** —
+dirender mentah di layar guru. Satu siswa bisa menjalankan kode di peramban
+gurunya saat dinilai. Empat titik semacam ini nyaris terlewat, jadi ada
+penjaga yang menolak `dangerouslySetInnerHTML` di luar `<IsiKaya>`.
+
+Daftar-putihnya dari sensus, bukan tebakan: div 2.238, br 2.070, img 3.184,
+b 417, i 248, li 105, ol 99, audio 3, dan satu `iframe` yang ternyata sematan
+YouTube yang sah. Delapan contoh isi produksi diuji — semuanya selamat utuh.
+38 vektor serangan, 12 isi sah, stabil dibersihkan dua kali.
+
 ---
 
 ## BELUM — UI/UX (dikerjakan lebih dulu)
@@ -74,14 +100,25 @@ ketika paletnya disamakan — dua kegagalan yang sebelumnya tidak bersuara.
 ### 1. Rich text untuk isi cerita/stimulus
 - [ ] Penyunting rich text di `/admin/question-stories`
 
+- [ ] Penyunting yang sama di form soal `/admin/questions`
+
 Isinya tersimpan sebagai HTML tetapi disunting di textarea polos, sehingga guru
 melihat `<div>`, `&nbsp;`, dan `</div>` bercampur teks soal. Setiap
 penyuntingan berisiko merusak markup yang sudah ada.
 
-**Didahulukan di antara butir UI** karena ini satu-satunya yang sedang
-menampilkan sesuatu yang salah kepada pengguna, dan karena penyuntingnya
-adalah komponen yang akan dipakai layar lain — dibuat belakangan berarti layar
-yang sudah jadi harus dibongkar lagi.
+**Survei mengubah cakupannya.** Cerita hanya **2 baris** di produksi; yang jauh
+lebih banyak dipakai adalah **soal — 4.797 baris ber-HTML**, dan form soal v2
+juga memakai textarea polos. v1 memakai penyunting yang sama di kedua tempat,
+jadi penyuntingnya dibuat sekali dan dipasang di keduanya.
+
+Dan yang dipakai v1 **bukan CKEditor sungguhan** — hanya dinamai begitu.
+Isinya 25 KB `contenteditable` buatan sendiri (`public/js/ckeditor/ckeditor.js`)
+dengan tebal/miring/garis-bawah, daftar, tautan, undo/redo, serta unggah
+gambar/audio/video berikut rotasi dan kompresi lewat canvas. Jadi menyamakannya
+tidak berarti menambah pustaka berat.
+
+Titik unggahnya sudah ada: `POST /api/admin/questions/upload-media` menerima
+`upload`/`file` dan membalas `{url}`.
 
 ### 2. Sisa select yang belum bisa dicari
 - [ ] 22 select tersisa
