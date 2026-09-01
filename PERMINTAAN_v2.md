@@ -4,7 +4,7 @@ Catatan seluruh permintaan yang pernah disampaikan, beserta keadaannya.
 Disusun agar tidak ada yang terlewat; diperbarui setiap kali ada yang selesai
 atau ada permintaan baru.
 
-Terakhir diperbarui: **1 September 2026** (putaran ke-3)
+Terakhir diperbarui: **1 September 2026** (putaran ke-4)
 
 Berkas ini TERPISAH dari `PLAN_EXAM_V1_V2.md`, yang berisi rencana teknis 12
 item hasil pembacaan kode. Yang di sini adalah permintaan sebagaimana
@@ -170,6 +170,30 @@ Cadangan vhost tersimpan di server: `/root/cadangan-exam_v{1,2}.20260901-213155`
 | 11.6 | Tagihan manual bisa menambah add-on | ✅ |
 | 11.7 | Rincian: dasar, add-on, diskon, total | ✅ |
 | 11.8 | Centang lunas ambigu — pakai toggle | ✅ tiga keadaan eksplisit |
+
+---
+
+## 12. Cacat yang Anda temukan, dan akarnya
+
+| # | Laporan | Akar sebenarnya | Keadaan |
+|---|---|---|---|
+| 12.1 | Tampilan ponsel meluber ke kanan | `.button{width:100%}` di bawah 720px mengenai sepasang tombol navbar: wadahnya menyusut ke 163px, dua tombol jadi 163px masing-masing → luap 60px | ✅ 0px di 320/360/390/414, delapan halaman |
+| 12.2 | Register "terlalu banyak pendaftaran" | Jatah 3/jam dihitung SEBELUM validasi, jadi 4 kali salah ketik memakannya habis | ✅ dipisah: 30 percobaan, 3 pendaftaran berhasil |
+| 12.3 | Panel error tidak menjelaskan apa pun | `recentError` tidak pernah menyimpan pesannya | ✅ sebabnya ikut tampil |
+| 12.4 | Balas otomatis belum lengkap | Mengundang "sebutkan jumlahnya" lalu mengabaikan jawabannya | ✅ menghitung perkiraan biaya |
+| 12.5 | Pesan masuk tercatat dua kali | Fonnte tidak selalu mengirim id, dedup lewat `external_id` melewatkannya | ✅ kembar dalam 2 menit ditolak |
+| 12.6 | Beda Exclusive page vs Premium branding | Exclusive page tidak punya kode apa pun — hanya baris tagihan | ✅ dibuang (keputusan Anda) |
+
+---
+
+## 13. Belum dikerjakan dari putaran ini
+
+| # | Permintaan | Keadaan |
+|---|---|---|
+| 13.1 | Hasil stress test belum jelas hasilnya apa | ⬜ |
+| 13.2 | Stress test: last result belum ada | ⬜ |
+| 13.3 | Stress test: optimum & max concurrent belum ada | ⬜ |
+| 13.4 | Sisa select yang belum bisa dicari (~37 layar) | ⬜ |
 
 ---
 
