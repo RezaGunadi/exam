@@ -5,6 +5,8 @@ tiap layar, dengan kode yang lebih rapi, terstruktur, dan ringan.
 
 Disusun 2 September 2026, dari inventaris menyeluruh kedua repo.
 
+**SELURUH ANTREAN SELESAI** — delapan butir, semuanya terpasang dan terverifikasi.
+
 ---
 
 ## Temuan utama: paritas HALAMAN sudah lengkap
@@ -144,14 +146,28 @@ berubah, dan di v1 setiap perubahan menuntut deploy. Formatnya baris-per-
 rekening, bukan JSON — satu koma yang terlewat di JSON menghapus seluruh
 daftar dari layar tanpa galat.
 
-### 4. `admin/promotions` — 0.78
+### ✅ 4. `admin/promotions` — SELESAI
+"Pilih semua"/"Kosongkan" sudah ada. Yang kurang: tahun ajaran masih ketikan
+bebas — kini pilihan, bawaannya tahun **berikutnya** (di layar naik kelas itu
+memang tujuannya).
 
-### 5. `owner/users` — 0.80
+### ✅ 5. `owner/users` — SELESAI
+Tabelnya justru **melampaui** v1: v1 empat kolom, v2 enam (NISN dan telepon
+ikut). Yang salah reset sandinya — `window.prompt`, tanpa konfirmasi, dan
+pemanggilnya mengirim `password_confirmation` berisi **nilai yang sama**
+sehingga pemeriksaan konfirmasi di server dilumpuhkan dari sisi klien. Salah
+ketik satu huruf menetapkan sandi yang tidak diketahui siapa pun. Diganti
+dialog dengan dua isian yang dibandingkan sungguhan.
 
-### 6. `admin/attempt-management` — 0.82
-Baru saja diperbaiki (nama siswa/ujian, kolom email). Periksa ulang.
+### ✅ 6. `admin/attempt-management` — SELESAI
+**Mode attempt** tidak pernah dikirim: backend menerima `mode` +
+`custom_duration_minutes` sejak awal, v1 menampilkannya, v2 selalu memakai
+"auto". Bedanya nyata bagi siswa — ujian yang terputus di menit ke-50 dari 60
+bisa dilanjutkan dengan sisa 10 menit atau dimulai ulang dengan 60 menit penuh.
 
-### 8. `admin/exam-results` — 0.96
+### ✅ 8. `admin/exam-results` — SELESAI
+Saringan **ujian** tidak pernah dikirim, padahal backend menerimanya. Itu
+pertanyaan yang paling sering dibawa ke layar ini.
 
 ---
 
