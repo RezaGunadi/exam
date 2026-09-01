@@ -4,7 +4,7 @@ Catatan seluruh permintaan yang pernah disampaikan, beserta keadaannya.
 Disusun agar tidak ada yang terlewat; diperbarui setiap kali ada yang selesai
 atau ada permintaan baru.
 
-Terakhir diperbarui: **1 September 2026** (putaran ke-6)
+Terakhir diperbarui: **1 September 2026** (putaran ke-7)
 
 Berkas ini TERPISAH dari `PLAN_EXAM_V1_V2.md`, yang berisi rencana teknis 12
 item hasil pembacaan kode. Yang di sini adalah permintaan sebagaimana
@@ -194,6 +194,40 @@ Cadangan vhost tersimpan di server: `/root/cadangan-exam_v{1,2}.20260901-213155`
 | 13.2 | Stress test: last result belum ada | ✅ disimpan di `app_settings`, bertahan |
 | 13.3 | Stress test: optimum & max concurrent belum ada | ✅ kapasitas puncak & aman, berikut dasarnya |
 | 13.4 | Sisa select yang belum bisa dicari | 🔨 37 → 13, dan sisanya daftar pendek |
+
+---
+
+## 14. Putaran ketujuh
+
+| # | Laporan | Akar sebenarnya | Keadaan |
+|---|---|---|---|
+| 14.1 | Upload logo: "Tidak bisa menghubungi server" | `apiFetchForm` tak pernah menyetel method → fetch memakai GET, peramban menolak GET berbadan isi **sebelum** dikirim; tanpa jejak di log mana pun | ✅ |
+| 14.2 | Navbar ponsel jelek, tidak melipat seperti v1 | Isinya ditumpuk, bukan dilipat | ✅ 71px (8% layar), diukur |
+| 14.3 | Token tetap tampil padahal langganan | Hanya chip sidebar yang disembunyikan; kartu di halaman pembayaran belum | ✅ keduanya, dan muncul lagi saat langganan berakhir |
+| 14.4 | Belum bisa unduh invoice DP | Hanya ada dua dokumen; setoran DP tidak punya dokumen yang mengakuinya | ✅ kuitansi DP |
+| 14.5 | Lunasi sisa langsung lunas tanpa bukti | Klaim kosong tanpa lampiran | ✅ wajib bukti, tetap menunggu, notif WA menyebut **sisa** |
+| 14.6 | Pemilih berkas terbuka tanpa penjelasan | Jendela sistem tidak bisa diberi keterangan | ✅ dialog penjelas sebelum terbuka |
+| 14.7 | Pemindai tidak ada di perpustakaan | Endpoint `resolve-copy` sudah ada, pemindainya tidak pernah dipasang | ✅ kamera di 2 layar |
+| 14.8 | "Aktif sampai" tidak terisi otomatis | Diisi `tanggal()` format manusia; `<input type=date>` menuntut YYYY-MM-DD dan menolaknya diam-diam | ✅ |
+| 14.9 | Tahun ajaran default 2027/2028 | Dihitung dari tahun berikutnya, bukan bulan Juli | ✅ pilihan ±2 tahun, bawaan yang berjalan |
+| 14.10 | Panel galat tidak bisa dicari | — | ✅ cari alamat/status/sebab/jam |
+| 14.11 | Paket soal terlalu sempit | Dipatok 320px | ✅ rasio 40/60 |
+| 14.12 | "Siswa #156", "Ujian #288" di 7.436 baris | `ExamAssignment` **tidak punya field relasi**; `Preload` menunjuk field yang tidak ada dan gagal diam-diam | ✅ + kolom email |
+| 14.13 | Banyak aset rusak | Basis data menyimpan **kunci objek** tanpa host; disusun jadi alamat situs ini → 404 | ✅ 18 logo & 4 tanda tangan terbukti terbuka |
+| 14.14 | Dua jadwal QR/referral masih ada | Sudah digantikan kait model + backfill boot | ✅ dibuang, fungsinya juga |
+
+---
+
+## 15. Belum dikerjakan
+
+| # | Permintaan | Keadaan |
+|---|---|---|
+| 15.1 | `lms.kelasprivat.id` | ⬜ pustaka varian dibuat, halaman & DNS belum |
+| 15.2 | `db.kelasprivat.id` + SSL untuk panel basis data | ⏸️ **DNS belum diarahkan** — vhost sudah bernama itu, sertifikat tidak bisa terbit tanpa DNS. Sekarang panelnya di `http://IP:8081`, sandi lewat **tanpa enkripsi** |
+| 15.3 | Tambah/hapus kategori buku pindah ke owner | ⬜ kategori per sekolah (669 baris); jalur "Lainnya" saat input buku terpisah dan tidak akan terpengaruh |
+| 15.4 | Rich text untuk isi cerita/stimulus | ⬜ isian masih textarea polos, HTML tampil mentah |
+| 15.5 | Tanda tangan kepala sekolah di profil sekolah | 🔨 kolom `schools.signature_image` **sudah ada** dan 4 sekolah sudah mengisinya — yang kurang isian di layar |
+| 15.6 | Penyelaras brand (vhost + SSL) di server | ⏸️ menunggu izin Anda |
 
 **Yang sudah bisa dicari** — daftar terpanjang yang paling sering dicari orang:
 paket soal (174 di produksi), siswa, kelas, mata pelajaran, tutor, peminjam
