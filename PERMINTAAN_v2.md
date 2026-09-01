@@ -46,10 +46,10 @@ dan judul tab semuanya benar, tanpa kebocoran merek induk.
 | 2.7 | Tombol pelunasan dari sekolah, disahkan owner | ✅ |
 | 2.8 | Invoice bisa disesuaikan add-on dan diskonnya | ✅ |
 
-**Perlu keputusan Anda:** `max_concurent_exam` masih di bawaan ≤5 pada **110
-dari 113 sekolah**, sementara yang tertinggi 130. Angka itulah dasar tagihan
-langganan — bila tidak disetel, hampir semua sekolah tertagih di kapasitas
-terendah.
+**Koreksi:** saya sempat menaikkan `max_concurent_exam` sebagai hal yang perlu
+Anda putuskan. Itu keliru. Dari 111 sekolah yang masih di angka bawaan, 85 tidak
+punya siswa sama sekali, 24 punya 1–5 siswa, dan nol berlangganan aktif — angka
+"110 dari 113" benar secara hitungan tetapi menyesatkan sebagai tanda bahaya.
 
 ---
 
@@ -303,7 +303,11 @@ materi, tugas, perpustakaan), bukan sisi ujiannya.
    padahal di server **tidak ada timer, unit, maupun cron** yang mengerjakannya.
    Tidak ada vhost dan tidak ada sertifikat untuk domain itu. Janji di layar
    harus dicabut atau penyelarasnya dipasang; sekarang layarnya berbohong.
-5. **`max_concurent_exam` per sekolah** — dasar tagihan langganan.
+5. ~~`max_concurent_exam` per sekolah~~ — **DICORET, saya keliru menaikkannya.**
+   Rumusnya memang `max_concurent_exam × Rp 3.500 × 12`, tetapi dari 111 sekolah
+   yang masih di angka bawaan: 85 **tidak punya siswa sama sekali**, 24 punya
+   1–5 siswa, dan **nol** berlangganan aktif. Yang benar-benar berlangganan
+   sudah menyetelnya sendiri. Tidak ada yang perlu diputuskan.
 6. **`r2_public_url`** — agar logo disajikan dari CDN, bukan lewat server.
 
 ---
