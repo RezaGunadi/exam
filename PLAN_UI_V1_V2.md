@@ -134,9 +134,15 @@ subkueri (EXISTS, bukan JOIN — satu ujian punya puluhan hasil).
 KKM ditampilkan di daftar. v1 punya, dan `createHint` v2 pun menyebutnya —
 hanya daftar kolomnya yang melewatkan.
 
-### 3. `admin/payment` — 0.62
-Blade v1: `admin/payment/index`. Sebagian sudah dikerjakan (DP, kuitansi DP,
-bukti pelunasan) — periksa sisanya.
+### ✅ 3. `admin/payment` — SELESAI
+v1 menampilkan **tiga rekening tujuan** (Mandiri, BCA, GoPay) berikut tombol
+salin. v2 tidak menampilkan satu pun — sekolah menerima kode billing dan
+nominal, lalu tidak diberi tahu ke mana mentransfernya.
+
+Disimpan sebagai **setelan**, bukan ditanam di kode seperti v1: nomor rekening
+berubah, dan di v1 setiap perubahan menuntut deploy. Formatnya baris-per-
+rekening, bukan JSON — satu koma yang terlewat di JSON menghapus seluruh
+daftar dari layar tanpa galat.
 
 ### 4. `admin/promotions` — 0.78
 
