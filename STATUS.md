@@ -17,12 +17,13 @@ Halaman itu dilihat orang yang belum tentu jadi pelanggan, dan kesan
 pertamanya tidak bisa diulang — sementara layar setelah login dilihat orang
 yang sudah memakai sistemnya setiap hari dan sudah terbiasa.
 
-### 1. Template halaman tanpa login belum sama dengan v1
-- [ ] Halaman depan (`/`)
-- [ ] Masuk & Daftar (`/login`, `/register`)
-- [ ] Harga (`/harga`)
-- [ ] Cek nilai tanpa akun (`/cek-progress`)
-- [ ] Halaman SEO & statis (`/about`, `/contact`, 3 halaman SEO, privasi, syarat)
+### ✅ 1. Template halaman tanpa login — SELESAI
+- [x] Halaman depan — bagian **testimoni** yang ada di v1 (isinya dari panel, bukan karangan v1)
+- [x] Masuk & Daftar — isian **"tahu dari mana"** yang v1 kumpulkan dan v2 hilangkan
+- [x] Harga — tidak ada di v1 (di sana bagian halaman depan); milik v2, tetap
+- [x] Cek nilai — saringan **mata pelajaran**
+- [x] Halaman statis — **kebijakan privasi v2 hanya SATU KALIMAT**; v1 543 kata. Kini 624 kata, dirender server, berstruktur
+- [x] Halaman SEO — sudah sebanding (652–821 kata vs v1 683–961)
 
 Yang disamakan **susunan dan tampilannya**, bukan hanya fiturnya: urutan
 bagian, pengelompokan, penamaan tombol, dan letak tindakan. Layar yang punya
@@ -32,15 +33,15 @@ Yang **tidak** ikut disamakan: kerangka teknisnya. v1 memakai Bootstrap dan
 jQuery; menyalin markup-nya berarti membawa serta yang justru ingin
 ditinggalkan.
 
-### 2. Template halaman setelah login belum sama dengan v1
-- [ ] Layar admin
-- [ ] Layar guru
-- [ ] Layar siswa
+### ✅ 2. Template halaman setelah login — SELESAI
+- [x] Kerangka & laci ponsel — sudah setara v1 sejak awal (z-index pun sudah disamakan)
+- [x] **Luapan 126px di SETIAP layar setelah login** — nol di 320px, sepuluh layar diukur
 
-Paritas **fungsi** delapan layar utama sudah selesai (lihat bagian SUDAH);
-yang tersisa susunan dan tampilannya.
+Dua akar, keduanya terukur: `.inline-alert` adalah flex baris yang memuat
+tombol berlebar 100% (kali **ketiga** aturan itu menyebabkan luapan), dan
+`.shell` memakai `1fr` alih-alih `minmax(0, 1fr)`.
 
-### 3. `lms.kelasprivat.id` menyajikan situs orang lain
+### 1. `lms.kelasprivat.id` menyajikan situs orang lain
 - [ ] Blok server 443 untuk `lms.kelasprivat.id`
 - [ ] Halaman depan bervarian LMS
 
@@ -54,7 +55,7 @@ sesuatu kepada publik.** DNS Anda sudah mengarah, dan resepnya sudah terbukti
 dua kali — tinggal dijalankan. Pustaka variannya (`src/lib/varian-situs.ts`)
 sudah dibuat; halaman depannya belum.
 
-### 4. Tanda tangan kepala sekolah tidak punya isian
+### 2. Tanda tangan kepala sekolah tidak punya isian
 - [ ] Isian unggah tanda tangan di `/admin/school`
 
 Kolom `schools.signature_image` **sudah ada**, dan **4 sekolah sudah
@@ -64,14 +65,14 @@ yang pindah ke v2 tidak bisa mengganti atau memasangnya.
 Didahulukan karena datanya sudah ada dan yang kurang hanya satu isian:
 pekerjaan kecil dengan akibat yang sudah nyata.
 
-### 5. Rich text untuk isi cerita/stimulus
+### 3. Rich text untuk isi cerita/stimulus
 - [ ] Penyunting rich text di `/admin/question-stories`
 
 Isinya tersimpan sebagai HTML tetapi disunting di textarea polos, sehingga guru
 melihat `<div>`, `&nbsp;`, dan `</div>` bercampur teks soal. Setiap
 penyuntingan berisiko merusak markup yang sudah ada.
 
-### 6. Tambah/hapus kategori buku pindah ke owner
+### 4. Tambah/hapus kategori buku pindah ke owner
 - [ ] `POST` dan `DELETE` kategori dibatasi owner
 - [ ] Layar pengelolaan kategori di panel owner
 - [ ] Layar admin menjadi baca-saja
@@ -80,7 +81,7 @@ Kategori **per sekolah** (669 baris di produksi), dan jalur "Lainnya" saat input
 buku memakai kode yang **terpisah** (`resolveBookCategory`) — jadi membatasi
 endpoint kategori tidak akan mematahkannya. Sudah diverifikasi.
 
-### 7. Sisa select yang belum bisa dicari
+### 5. Sisa select yang belum bisa dicari
 - [ ] 22 select tersisa
 
 Turun dari 37. Yang tersisa berisi daftar pendek — tahun ajaran, semester, jenis
@@ -144,6 +145,8 @@ kapan saja dan hanya soal keseragaman tampilan, bukan fungsi.
 - [x] Dialog penjelas sebelum pemilih berkas terbuka
 
 ### Perbaikan yang ditemukan sendiri
+- [x] **Kebijakan privasi & syarat layanan hanya satu kalimat** — dokumen yang jadi pegangan sekolah saat menyerahkan data siswanya
+- [x] **Halaman /ads** yang menunda setiap login belasan detik — dihapus
 - [x] **Pendaftaran sekolah baru gagal total** — token 36 karakter di kolom `varchar(16)`, Error 1406. Tidak ada jalan lain masuk ke sistem selain lewat sana
 - [x] Unggah berkas terkirim sebagai **GET** — peramban menolaknya sebelum berangkat, tanpa jejak di log
 - [x] Foto proktoring rusak di **2.337** hasil ujian
