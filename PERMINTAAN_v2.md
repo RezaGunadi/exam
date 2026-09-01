@@ -4,7 +4,7 @@ Catatan seluruh permintaan yang pernah disampaikan, beserta keadaannya.
 Disusun agar tidak ada yang terlewat; diperbarui setiap kali ada yang selesai
 atau ada permintaan baru.
 
-Terakhir diperbarui: **1 September 2026** (putaran ke-4)
+Terakhir diperbarui: **1 September 2026** (putaran ke-5)
 
 Berkas ini TERPISAH dari `PLAN_EXAM_V1_V2.md`, yang berisi rencana teknis 12
 item hasil pembacaan kode. Yang di sini adalah permintaan sebagaimana
@@ -190,10 +190,21 @@ Cadangan vhost tersimpan di server: `/root/cadangan-exam_v{1,2}.20260901-213155`
 
 | # | Permintaan | Keadaan |
 |---|---|---|
-| 13.1 | Hasil stress test belum jelas hasilnya apa | ⬜ |
-| 13.2 | Stress test: last result belum ada | ⬜ |
-| 13.3 | Stress test: optimum & max concurrent belum ada | ⬜ |
+| 13.1 | Hasil stress test belum jelas hasilnya apa | ✅ vonis + sebab, dihitung server |
+| 13.2 | Stress test: last result belum ada | ✅ disimpan di `app_settings`, bertahan |
+| 13.3 | Stress test: optimum & max concurrent belum ada | ✅ kapasitas puncak & aman, berikut dasarnya |
 | 13.4 | Sisa select yang belum bisa dicari (~37 layar) | ⬜ |
+| 13.5 | Owner: "Approve" ambigu, detail tagihan tidak bisa dibuka | ✅ "Sahkan lunas/pelunasan" + tombol Detail |
+| 13.6 | Balas otomatis tidak menjawab jumlah siswa | ✅ akar: jeda 30 menit membungkam undangannya sendiri |
+| 13.7 | Pesan masuk masih tersimpan ganda | ✅ akar: dedup baca-lalu-tulis kalah balapan; kini indeks unik |
+
+**Cara angka kapasitas dihitung** — ditulis di sini supaya bisa dibantah, bukan
+dipercaya: throughput terukur ÷ 0,05 permintaan per siswa per detik. Angka 0,05
+diturunkan dari layar ujian yang sebenarnya (autosave debounce 700 ms, heartbeat
+60 detik, revalidate 60 detik ≈ 3 permintaan/menit). "Aman" = 70% dari itu,
+menyisakan ruang untuk lonjakan saat semua siswa menekan mulai bersamaan. Bila
+ada satu saja permintaan yang gagal, angkanya **tidak ditampilkan**: yang
+terukur saat itu bukan kecepatan melayani, melainkan kecepatan menolak.
 
 ---
 
