@@ -4,7 +4,7 @@ Catatan seluruh permintaan yang pernah disampaikan, beserta keadaannya.
 Disusun agar tidak ada yang terlewat; diperbarui setiap kali ada yang selesai
 atau ada permintaan baru.
 
-Terakhir diperbarui: **1 September 2026** (putaran ke-5)
+Terakhir diperbarui: **1 September 2026** (putaran ke-6)
 
 Berkas ini TERPISAH dari `PLAN_EXAM_V1_V2.md`, yang berisi rencana teknis 12
 item hasil pembacaan kode. Yang di sini adalah permintaan sebagaimana
@@ -193,7 +193,19 @@ Cadangan vhost tersimpan di server: `/root/cadangan-exam_v{1,2}.20260901-213155`
 | 13.1 | Hasil stress test belum jelas hasilnya apa | ✅ vonis + sebab, dihitung server |
 | 13.2 | Stress test: last result belum ada | ✅ disimpan di `app_settings`, bertahan |
 | 13.3 | Stress test: optimum & max concurrent belum ada | ✅ kapasitas puncak & aman, berikut dasarnya |
-| 13.4 | Sisa select yang belum bisa dicari (~37 layar) | ⬜ |
+| 13.4 | Sisa select yang belum bisa dicari | 🔨 37 → 13, dan sisanya daftar pendek |
+
+**Yang sudah bisa dicari** — daftar terpanjang yang paling sering dicari orang:
+paket soal (174 di produksi), siswa, kelas, mata pelajaran, tutor, peminjam
+perpustakaan, soal cerita, kategori buku, ruang kelas siswa, dan sekolah.
+
+**Yang sengaja dibiarkan:** 13 sisanya berisi daftar pendek — tahun ajaran,
+semester, jenis pembayaran perpustakaan, daftar kamera. Mengubahnya menjadi
+kotak pencarian menambah langkah tanpa menambah apa pun: pilihannya sudah
+terlihat seluruhnya begitu daftarnya terbuka. `PilihCari` kini menyesuaikan
+diri — di bawah sembilan pilihan ia menampilkan daftar biasa tanpa kotak
+ketik — jadi mengubah sisanya kapan pun aman dan hanya soal keseragaman
+tampilan, bukan fungsi.
 | 13.5 | Owner: "Approve" ambigu, detail tagihan tidak bisa dibuka | ✅ "Sahkan lunas/pelunasan" + tombol Detail |
 | 13.6 | Balas otomatis tidak menjawab jumlah siswa | ✅ akar: jeda 30 menit membungkam undangannya sendiri |
 | 13.7 | Pesan masuk masih tersimpan ganda | ✅ akar: dedup baca-lalu-tulis kalah balapan; kini indeks unik |
