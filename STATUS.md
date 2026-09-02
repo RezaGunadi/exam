@@ -97,30 +97,28 @@ YouTube yang sah. Delapan contoh isi produksi diuji — semuanya selamat utuh.
 
 ## BELUM — UI/UX (dikerjakan lebih dulu)
 
-### 1. Rich text untuk isi cerita/stimulus
-- [ ] Penyunting rich text di `/admin/question-stories`
+### ✅ Rich text — SELESAI 2 September
+- [x] Penyunting berformat di `/admin/question-stories`
+- [x] Penyunting yang sama di teks soal `/admin/questions`
+- [x] Tiap opsi jawaban (bilah ringkas, sisip gambar tetap ada)
+- [x] Pemeriksaan "wajib diisi" memakai `kosongVisual()`, bukan `.trim()`
 
-- [ ] Penyunting yang sama di form soal `/admin/questions`
+Cakupannya melebar setelah survei: cerita hanya **2 baris** di produksi,
+sedangkan **soal 4.797 baris ber-HTML** dan **479 set opsi**, semuanya juga
+disunting di kotak polos. v1 memasang penyuntingnya di ketiga tempat itu, jadi
+v2 pun begitu — satu komponen, tiga pemasangan.
 
-Isinya tersimpan sebagai HTML tetapi disunting di textarea polos, sehingga guru
-melihat `<div>`, `&nbsp;`, dan `</div>` bercampur teks soal. Setiap
-penyuntingan berisiko merusak markup yang sudah ada.
+Yang dipakai v1 ternyata **bukan CKEditor sungguhan**, hanya 25 KB
+`contenteditable` buatan sendiri. Jadi menyamakannya tidak menambah satu pun
+pustaka.
 
-**Survei mengubah cakupannya.** Cerita hanya **2 baris** di produksi; yang jauh
-lebih banyak dipakai adalah **soal — 4.797 baris ber-HTML**, dan form soal v2
-juga memakai textarea polos. v1 memakai penyunting yang sama di kedua tempat,
-jadi penyuntingnya dibuat sekali dan dipasang di keduanya.
+Bagian tersulitnya kursor: komponen React yang menulis ulang `innerHTML` tiap
+render membuat "abcde" menjadi "edcba". Diuji di Chrome sungguhan lewat CDP —
+mengetik lima huruf, menekan tombol tebal, menempel HTML kotor — **11
+pemeriksaan lulus**, termasuk urutan hurufnya. Halaman ujinya sementara dan
+sudah dihapus (`/uji-penyunting` membalas 404 di produksi).
 
-Dan yang dipakai v1 **bukan CKEditor sungguhan** — hanya dinamai begitu.
-Isinya 25 KB `contenteditable` buatan sendiri (`public/js/ckeditor/ckeditor.js`)
-dengan tebal/miring/garis-bawah, daftar, tautan, undo/redo, serta unggah
-gambar/audio/video berikut rotasi dan kompresi lewat canvas. Jadi menyamakannya
-tidak berarti menambah pustaka berat.
-
-Titik unggahnya sudah ada: `POST /api/admin/questions/upload-media` menerima
-`upload`/`file` dan membalas `{url}`.
-
-### 2. Sisa select yang belum bisa dicari
+### 1. Sisa select yang belum bisa dicari
 - [ ] 22 select tersisa
 
 Turun dari 37. Yang tersisa berisi daftar pendek — tahun ajaran, semester, jenis
@@ -128,7 +126,7 @@ pembayaran perpustakaan, daftar kamera. `PilihCari` sudah menyesuaikan diri (di
 bawah sembilan pilihan ia tidak menampilkan kotak ketik), jadi mengubahnya aman
 kapan saja dan hanya soal keseragaman tampilan, bukan fungsi.
 
-### 3. Aksesibilitas layar ujian
+### 2. Aksesibilitas layar ujian
 - [ ] Belum pernah diperiksa sama sekali
 
 Layar yang **paling lama dipakai siswa**, dan satu-satunya yang tidak bisa
