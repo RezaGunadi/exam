@@ -238,20 +238,38 @@ terbawa sebagai butir daftar, tanggal dan nama merek hilang di lima kalimat.
 
 ## BELUM — UI/UX
 
-### 1. Irama gelap–terang halaman depan — MENUNGGU KEPUTUSAN ANDA
-- [ ] Disamakan dengan v1, atau diputuskan tetap
+### ✅ Halaman depan: dua bagian hilang + irama gelap–terang — SELESAI 2 September
+- [x] "Mulai Ujian Online Tanpa Biaya" (kartu gelap, seperti v1)
+- [x] "Unlimited Attempt — Full Customized Per Percobaan"
+- [x] Bagian pengawasan & komitmen berlatar gelap seperti v1
+- [x] Logo & favicon branding pulih (cacat terpisah, lihat di bawah)
 
-Dipotret berdampingan: **v1 berirama gelap–terang bergantian** — beberapa
-bagian penuh berlatar biru tua dengan kartu gelap dan ubin ikon berwarna.
-**v2 hampir seluruhnya terang**, hanya satu bagian gelap di tengah. Halaman v1
-juga jauh lebih panjang (16.328px vs 12.313px).
+Dibandingkan satu per satu: v1 punya 14 bagian, v2 kehilangan **dua**.
 
-Itu perbedaan gaya terbesar yang tersisa, dan **bukan cacat**: v2 memang
-dirancang lebih terang. Menyamakannya berarti menyusun ulang irama seluruh
-halaman depan — pekerjaan besar yang mengubah kesan pertama produk, jadi tidak
-saya putuskan sendiri.
+**"Unlimited Attempt"** yang paling merugikan: fiturnya **ADA** di v2 dan
+dipakai lewat panel manajemen attempt — empat mode `fresh_start`,
+`continue_remaining`, `full_time`, `custom_duration` — tetapi tidak diceritakan
+sama sekali di halaman depan. Fitur yang tidak diceritakan sama saja dengan
+tidak ada bagi sekolah yang sedang membandingkan pilihan.
 
-### 2. Blok ajakan v1 di halaman statis — MENUNGGU KEPUTUSAN ANDA
+Yang **tidak** ditambahkan karena ternyata sudah ada padanannya: `#komitmen`,
+`#kontak`, `#demo`, dan kolom "Khusus / Hubungi kami" di bagian harga.
+
+Warna gelapnya memakai token brand, bukan angka tetap — sekolah dengan branding
+premium melihat warnanya sendiri di sana.
+
+### ✅ Logo & favicon branding rusak — SELESAI 2 September
+- [x] Penyaji logo mendahulukan disk, bukan CDN
+
+Unggahan menulis ke **disk** dan tidak pernah mengunggah ke R2, tetapi
+penyajinya **selalu** mengalihkan ke CDN begitu `r2_public_url` terisi. Logo
+setiap sekolah berbranding karena itu selalu 404: tersimpan benar, tercatat
+benar, tidak pernah bisa tampil.
+
+Senyap dari sisi server — pengalihannya sendiri berhasil, yang 404 adalah
+tujuannya di host lain. Log tetap bersih.
+
+### 1. Blok ajakan v1 di halaman statis — MENUNGGU KEPUTUSAN ANDA
 - [ ] Ditambahkan, atau diputuskan tidak perlu
 
 v1 menempelkan blok promosi yang sama di bawah **setiap** halaman statis
