@@ -279,6 +279,31 @@ berimbang: `/about` +9 kata, `/contact` +70, `/privacy-policy` −22,
 
 ---
 
+### ✅ Fitur "Lulus" di Naik Kelas — SELESAI 2 September
+- [x] Pilihan tiga-arah: naik / tinggal / **lulus**
+- [x] Kelulusan tercatat di enrollment (`status="graduated"` + `end_date`)
+- [x] Akun di-soft-delete; seluruh nilai, jawaban, dan raport tetap terbaca
+- [x] Layar `/admin/alumni`
+- [ ] Naik kelas GABUNGAN (`/admin/promotions/susun`) belum punya pilihan lulus
+
+**Kenapa bukan sekadar soft delete.** Menandai siswa lulus dan menghapus siswa
+karena salah input menghasilkan baris yang **sama persis** bila keduanya hanya
+mengisi `deleted_at` — tidak bisa dibedakan, tidak ada daftar alumni, dan
+memulihkan yang keliru menjadi tebak-tebakan.
+
+**Tidak ada perubahan skema.** Kolomnya sudah ada di `student_enrollments`, dan
+`status` bertipe varchar — bukan enum yang menolak nilai baru.
+
+**Bagian yang paling mudah dilanggar tanpa terlihat:** JOIN SQL biasa tidak
+menyaring `deleted_at`, jadi hasil ujian alumni tetap muncul. Yang **menyaring**
+justru `Preload` dan kueri `Model(&User{})` — laporan tetap terbuka, jumlah
+barisnya benar, hanya namanya yang kosong. Empat tempat semacam itu diperbaiki.
+
+`class_id` sengaja tidak dikosongkan: itu kelas terakhir siswa, dan tidak ada
+tempat lain yang menyimpannya untuk tahun sebelum enrollment dipakai.
+
+---
+
 ## BELUM — fitur (setelah UI beres)
 
 ### 4. Tanda tangan kepala sekolah tidak punya isian
