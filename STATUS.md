@@ -118,15 +118,30 @@ mengetik lima huruf, menekan tombol tebal, menempel HTML kotor — **11
 pemeriksaan lulus**, termasuk urutan hurufnya. Halaman ujinya sementara dan
 sudah dihapus (`/uji-penyunting` membalas 404 di produksi).
 
-### 1. Sisa select yang belum bisa dicari
-- [ ] 22 select tersisa
+### ✅ Select yang bisa dicari — SELESAI 2 September
+- [x] 15 daftar pilihan berisi data basis data dikonversi
+- [x] Enum tetap sengaja DIBIARKAN `<select>` bawaan, dengan alasan tertulis
 
-Turun dari 37. Yang tersisa berisi daftar pendek — tahun ajaran, semester, jenis
-pembayaran perpustakaan, daftar kamera. `PilihCari` sudah menyesuaikan diri (di
-bawah sembilan pilihan ia tidak menampilkan kotak ketik), jadi mengubahnya aman
-kapan saja dan hanya soal keseragaman tampilan, bukan fungsi.
+Dikonversi: mapel (kelas siswa, materi siswa, detail kelas), semester/mapel/
+kelas di rekap tugas, semester dan mapel di cek nilai publik, ruang obrolan,
+kelas tujuan kenaikan, tahun ajaran, soal esai yang dilampiri berkas, katalog
+add-on, dan kategori buku.
 
-### 2. Aksesibilitas layar ujian
+**Tidak semua `<select>` dikonversi, dan itu keputusan.** Tipe soal, huruf
+pilihan A–E, jenis pembayaran perpustakaan (peta tetap 3 entri di Go), status
+per baris tabel, jenis ujian, dan daftar kamera tetap memakai `<select>`
+bawaan: panjangnya tidak pernah berubah, dan di ponsel `<select>` membuka
+pemilih sistem yang sudah dikenal semua orang — komponen sendiri hanya
+menirunya dan selalu kalah.
+
+Dua sentinel perlu penanganan khusus karena `PilihCari` mengosongkan ke `""`
+sedangkan halamannya memakai nilai sungguhan: `"all"` (rekap tugas, materi)
+dan `"__other__"` (kategori buku) tetap menjadi opsi biasa.
+
+`uji-select-dicari.mjs` menuntut setiap `<select>` yang membangun pilihannya
+dengan `.map()` punya alasan tertulis — bukan melarang `<select>`.
+
+### 1. Aksesibilitas layar ujian
 - [ ] Belum pernah diperiksa sama sekali
 
 Layar yang **paling lama dipakai siswa**, dan satu-satunya yang tidak bisa
