@@ -81,6 +81,26 @@ else
   JEDA_GAGAL=3600    # 1 jam
 fi
 
+# Bentuk HTTP/2 yang dipakai vhost, MENGIKUTI VERSI NGINX DI MESIN INI.
+#
+# Sintaksnya berubah di nginx 1.25.1: direktif tersendiri `http2 on;`
+# menggantikan parameter `http2` pada baris listen. Keduanya tidak saling
+# menerima, dan yang lama tidak sekadar mengabaikan yang baru — ia menolaknya
+# dengan "unknown directive" lalu menolak memuat SELURUH konfigurasinya.
+# Akibatnya bukan satu domain branding yang tidak bisa dibuka, melainkan
+# seluruh situs di server ini sekaligus, v1 termasuk.
+#
+# Versinya dibaca sekali di sini supaya tidak ada tempat lain yang menebak.
+# Server ini menjalankan 1.18, dan sebelas vhost lain di dalamnya memakai
+# bentuk lama; menulis bentuk baru membuat vhost branding menjadi satu-satunya
+# yang berbeda — dan satu-satunya yang mematikan nginx.
+NGINX_VERSI="$(nginx -v 2>&1 | sed -E 's|.*/([0-9]+(\.[0-9]+)*).*|\1|')"
+if [ "$(printf '%s\n1.25.1\n' "$NGINX_VERSI" | sort -V | head -1)" = "1.25.1" ]; then
+  BARIS_SSL_LISTEN=$'listen 443 ssl;\n    listen [::]:443 ssl;\n    http2 on;'
+else
+  BARIS_SSL_LISTEN=$'listen 443 ssl http2;\n    listen [::]:443 ssl http2;'
+fi
+
 boleh_coba_lagi() {
   local penanda="${STATE_DIR}/$1.gagal" umur
   [ -f "$penanda" ] || return 0
@@ -197,9 +217,7 @@ CONF
 }
 
 server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
-    http2 on;
+    ${BARIS_SSL_LISTEN}
     server_name ${domain} www.${domain};
 
     ssl_certificate     ${cert};
