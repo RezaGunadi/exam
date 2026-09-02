@@ -284,7 +284,17 @@ berimbang: `/about` +9 kata, `/contact` +70, `/privacy-policy` −22,
 - [x] Kelulusan tercatat di enrollment (`status="graduated"` + `end_date`)
 - [x] Akun di-soft-delete; seluruh nilai, jawaban, dan raport tetap terbaca
 - [x] Layar `/admin/alumni`
-- [ ] Naik kelas GABUNGAN (`/admin/promotions/susun`) belum punya pilihan lulus
+- [x] Naik kelas GABUNGAN (`/admin/promotions/susun`) juga punya pilihan lulus
+
+Di layar gabungan bentuknya berbeda karena modelnya berbeda: centang di sana
+berarti "pindah ke kelas tujuan", jadi lulus menjadi kolom tersendiri yang
+saling meniadakan. Menandai lulus **melepas** pilihan pindahnya dan mematikan
+kotaknya — bukan dibiarkan bisa dicentang lalu ditolak server setelah semuanya
+terlanjur disusun.
+
+Aturan "satu siswa tidak boleh ada di dua daftar" diangkat menjadi satu fungsi
+yang dipakai kedua alur. Aturan keselamatan yang ditulis dua kali akan berbeda
+suatu saat, dan yang berbeda biasanya yang jarang dibaca.
 
 **Kenapa bukan sekadar soft delete.** Menandai siswa lulus dan menghapus siswa
 karena salah input menghasilkan baris yang **sama persis** bila keduanya hanya
