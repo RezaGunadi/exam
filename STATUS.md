@@ -201,13 +201,63 @@ v2. Tidak saya tambahkan sendiri karena ini keputusan produk, bukan cacat:
 menaruh ajakan mendaftar di bawah kebijakan privasi adalah pilihan, dan
 halaman depan v2 sudah punya bagian ajakannya sendiri.
 
-### 2. Aksesibilitas layar SETELAH login
-- [ ] Belum diperiksa
+### ✅ Aksesibilitas layar SETELAH login — SELESAI 2 September
+- [x] Aturan jsx-a11y dinyalakan penuh di `eslint.config.mjs`
+- [x] 21 temuan → **nol**; `npm run lint` bersih
 
-21 temuan eslint jsx-a11y menunggu (angka jujur setelah positif palsu dari
-komponen sendiri dikeluarkan; mentahnya 79). Yang paling berarti:
-`exam-workspace.tsx` — gambar soal bisa diperbesar dengan klik tetapi **tidak
-dengan keyboard**, dan `image-lightbox` menutup dengan klik saja.
+Bawaan Next hanya menyalakan enam aturan, semuanya soal ARIA salah tulis. Yang
+tidak diperiksanya justru yang paling sering terjadi di sini.
+
+Yang paling berarti: **gambar soal di layar ujian hanya bisa diperbesar dengan
+tetikus.** Siswa yang memakai keyboard — karena tangannya terbatas, atau
+karena tetikusnya rusak di tengah ujian — tidak punya cara apa pun melihatnya
+lebih besar, di layar yang tidak boleh ia tinggalkan. Kini `<button>`
+sungguhan.
+
+Empat dialog memasang `role="dialog"` di **latarnya**, bukan di panelnya, dan
+menahan rambatan lewat `onClick` di kotaknya. Diperbaiki dengan membandingkan
+target di latar.
+
+Tujuh dari 21 temuan ternyata **positif palsu**: saklar di aplikasi ini
+menyarangkan teksnya tiga tingkat, dan batas bawaan aturannya hanya dua.
+Diperbaiki lewat `depth: 3`, bukan dengan mematikan aturannya.
+
+### ✅ Gaya halaman statis mengikuti v1 — SELESAI 2 September
+- [x] Skala judul disamakan (h1 24px, h2 18,4px)
+- [x] Judul & baris tanggal keluar dari kartu, seperti v1
+- [x] Lima sisa interpolasi Blade yang hilang dipulihkan
+
+Diukur di peramban: judul bagian v2 **28px**, v1 **18,4px** — 52% lebih besar.
+Sebabnya `.landing-section h2` ikut mengenai halaman statis dan **menang** atas
+`.static-prose h2`.
+
+Ditemukan pula kerusakan porting yang lebih banyak dari kemarin: remah roti v1
+terbawa sebagai butir daftar, tanggal dan nama merek hilang di lima kalimat.
+
+---
+
+## BELUM — UI/UX
+
+### 1. Irama gelap–terang halaman depan — MENUNGGU KEPUTUSAN ANDA
+- [ ] Disamakan dengan v1, atau diputuskan tetap
+
+Dipotret berdampingan: **v1 berirama gelap–terang bergantian** — beberapa
+bagian penuh berlatar biru tua dengan kartu gelap dan ubin ikon berwarna.
+**v2 hampir seluruhnya terang**, hanya satu bagian gelap di tengah. Halaman v1
+juga jauh lebih panjang (16.328px vs 12.313px).
+
+Itu perbedaan gaya terbesar yang tersisa, dan **bukan cacat**: v2 memang
+dirancang lebih terang. Menyamakannya berarti menyusun ulang irama seluruh
+halaman depan — pekerjaan besar yang mengubah kesan pertama produk, jadi tidak
+saya putuskan sendiri.
+
+### 2. Blok ajakan v1 di halaman statis — MENUNGGU KEPUTUSAN ANDA
+- [ ] Ditambahkan, atau diputuskan tidak perlu
+
+v1 menempelkan blok promosi yang sama di bawah **setiap** halaman statis
+(~100 kata). Setelah blok itu dikeluarkan dari hitungan, isi keempat halaman
+berimbang: `/about` +9 kata, `/contact` +70, `/privacy-policy` −22,
+`/terms` −24.
 
 ---
 
