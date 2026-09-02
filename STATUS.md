@@ -141,12 +141,73 @@ dan `"__other__"` (kategori buku) tetap menjadi opsi biasa.
 `uji-select-dicari.mjs` menuntut setiap `<select>` yang membangun pilihannya
 dengan `.map()` punya alasan tertulis — bukan melarang `<select>`.
 
-### 1. Aksesibilitas layar ujian
-- [ ] Belum pernah diperiksa sama sekali
+### ✅ Aksesibilitas halaman TANPA LOGIN — SELESAI 2 September
+- [x] 14 halaman publik diukur axe-core di peramban sungguhan
+- [x] 25 simpul bermasalah → **nol**
+- [x] Paritas isi dengan v1 diperiksa, dan satu cacat isi ditemukan + diperbaiki
 
-Layar yang **paling lama dipakai siswa**, dan satu-satunya yang tidak bisa
-ditinggalkan di tengah jalan. Dipindahkan ke sini dari daftar "belum pernah
-disapu" karena ini pekerjaan UI, bukan celah teknis.
+Diukur dengan axe-core (WCAG 2.0/2.1 A+AA + best-practice) pada halaman yang
+sudah tergambar — bukan dibaca dari kode. Yang ditemukan:
+
+| dampak | masalah | tempat |
+|---|---|---|
+| serious | kontras `.eyebrow` **2.16:1** (butuh 4.5) | 18 simpul, 6 halaman |
+| serious | `--muted` **4.24:1** di latar kartu abu | halaman harga |
+| moderate | judul footer `h3` melompati `h2` | 4 halaman |
+| moderate | tombol WA mengambang di luar semua landmark | 2 halaman |
+| moderate | `/reset-password` tanpa `<main>` | 1 halaman |
+
+Kontrasnya diperbaiki dengan token baru `--aksen-teks`, TERPISAH dari
+`--secondary-dark` — yang itu dipakai gradien hero di atas biru tua, tempat
+amber terang justru benar. Satu nilai tidak bisa melayani keduanya.
+
+**Warna v1 diperiksa:** `#0c2947`, `#163b68`, `#f5b23c`, `#64748b` — sama
+persis. `#e09a1f` dan chip `.eyebrow` **tidak ada di v1**, jadi perbaikan ini
+tidak menjauhkan v2 dari v1.
+
+### ✅ Cacat isi halaman kontak — SELESAI 2 September
+- [x] Surel, telepon, dan kota dipulihkan
+- [x] Dua formulir WhatsApp v1 dipulihkan
+- [x] `/about` mendapat kembali nama merek dan blok "Informasi situs"
+
+`/contact` hanya **50%** panjang v1, dan sebabnya buruk: halaman kontak tidak
+punya satu pun cara menghubungi siapa pun. Yang tampil hanya "Kontak langsung"
+lalu "`, Indonesia`" dengan koma menggantung. Nilainya di v1 ditulis
+`{{ $supportEmail }}`, dan ikut terbuang ketika markupnya dibuang saat
+pemindahan. Tidak ada galat; halamannya tetap rapi.
+
+Dua formulir WhatsApp juga hilang — yang terbawa hanya judulnya, sehingga
+halaman menampilkan "Kirim pesan" dan "Minta demo" berturut-turut tanpa apa pun
+di bawahnya. Sekarang 85% panjang v1, dan setelah blok ajakan bersama v1
+dikeluarkan dari hitungan justru **+70 kata**.
+
+Setelah blok itu dikeluarkan, isi keempat halaman berimbang: `/about` +9 kata,
+`/contact` +70, `/privacy-policy` −22, `/terms` −24.
+
+---
+
+## BELUM — UI/UX
+
+### 1. Blok ajakan v1 di halaman statis — MENUNGGU KEPUTUSAN ANDA
+- [ ] Ditambahkan, atau diputuskan tidak perlu
+
+v1 menempelkan blok promosi yang sama di bawah **setiap** halaman statis:
+"Mulai Ujian Online Tanpa Biaya / 100% Gratis Dipakai / 500 Token Saat Daftar /
+Bonus Kode Referral" — sekitar 100 kata. v2 tidak punya itu di `/about`,
+`/contact`, `/privacy-policy`, dan `/terms`.
+
+**Itu satu-satunya perbedaan isi yang tersisa** antara halaman statis v1 dan
+v2. Tidak saya tambahkan sendiri karena ini keputusan produk, bukan cacat:
+menaruh ajakan mendaftar di bawah kebijakan privasi adalah pilihan, dan
+halaman depan v2 sudah punya bagian ajakannya sendiri.
+
+### 2. Aksesibilitas layar SETELAH login
+- [ ] Belum diperiksa
+
+21 temuan eslint jsx-a11y menunggu (angka jujur setelah positif palsu dari
+komponen sendiri dikeluarkan; mentahnya 79). Yang paling berarti:
+`exam-workspace.tsx` — gambar soal bisa diperbesar dengan klik tetapi **tidak
+dengan keyboard**, dan `image-lightbox` menutup dengan klik saja.
 
 ---
 
