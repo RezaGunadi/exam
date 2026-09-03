@@ -665,17 +665,38 @@ Daftar ini kosong sekarang.
 
 ---
 
-## Di luar lingkup v1/v2 — ditemukan, tidak saya sentuh
+## Di luar lingkup v1/v2 — dan tetap dikerjakan
 
 Muncul saat memeriksa galat produksi atas pertanyaan Anda. **Bukan v1, bukan
-v2**, jadi saya laporkan tanpa mengubah apa pun:
+v2** — situs Laravel terpisah di `/var/www/company-kelasprivat` — tetapi
+keduanya berdiri di server yang sama dengan v1 dan v2, dan yang kedua (disk)
+bisa mematikan ketiganya sekaligus. Diperbaiki 3 September di repo
+`company-kelasprivat`; sisanya di tangan Anda karena hanya bisa dilakukan di
+server:
 
-- [ ] `kelasprivat.id` — halaman `/les-<mapel>-<kota>` membalas **HTTP 500**,
+- [x] `kelasprivat.id` — halaman `/les-<mapel>-<kota>` membalas **HTTP 500**,
       23 kali dalam 4 jam, termasuk kepada perayap Meta dan pengunjung yang
       datang dari halaman depan situs itu sendiri.
       Sebabnya: baris `seo_pages` dibuat saat halaman pertama kali dibuka,
       tetapi `INSERT`-nya tidak mengisi kolom `content` yang tidak punya nilai
       bawaan — MySQL 1364. Situs Laravel terpisah di
       `/var/www/company-kelasprivat`.
-- [ ] Log situs itu **127 MB** dan tidak dirotasi. Disk server 79% terpakai
+      **Diperbaiki 3 September** (`511bb4d`): kolomnya ikut diisi saat
+      menyisipkan, jadi benar pada skema mana pun — repo menyatakan kolom itu
+      nullable, produksi menyimpang darinya. `firstOrCreate`, bukan
+      `updateOrCreate`, supaya konten suntingan tangan tidak tertimpa tiap
+      kunjungan. Ujinya memeriksa pernyataan INSERT-nya sendiri dan
+      diverifikasi GAGAL pada kode lama. **Menunggu deploy.**
+- [x] Log situs itu **127 MB** dan tidak dirotasi. Disk server 79% terpakai
       (14 GB sisa) — server yang sama menjalankan v1 dan v2.
+      **Diperbaiki 3 September** (`cb7b4b0`): saluran log bawaan menjadi
+      `daily` dengan simpanan 14 hari. Diubah pada bawaannya di
+      `config/logging.php`, bukan hanya di `.env.example` — `.env` produksi
+      tidak menyebut `LOG_STACK` sama sekali, jadi contoh yang diperbarui saja
+      tidak akan berpengaruh di sana.
+
+      **Dua hal masih di tangan Anda, keduanya di server:**
+      berkas `laravel.log` yang 127 MB itu tetap ada (saluran baru menulis ke
+      berkas bertanggal dan tidak menyentuh yang lama) sehingga perlu dihapus
+      sekali dengan tangan; dan `LOG_LEVEL=debug` di `.env` produksi — sebab
+      utama lognya sebesar itu — hanya bisa diubah di sana.
