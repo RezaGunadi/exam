@@ -264,7 +264,23 @@ CONF
     }
 }
 CONF
-  } > "$berkas"
+  } > "${berkas}.baru"
+
+  # DITULIS HANYA BILA BERBEDA, dan mengembalikan 0 hanya bila benar-benar
+  # berubah. Pemanggilnya memakai itu untuk memutuskan perlu reload atau tidak.
+  #
+  # Sebelumnya vhost-nya ditulis ulang setiap kali dan `berubah=1` dipasang
+  # tanpa syarat, jadi nginx di-reload SETIAP LIMA MENIT selamanya — 288 kali
+  # sehari, padahal isinya identik. Tiap reload memensiunkan proses pekerja
+  # lama dan menyalakan yang baru; pada mesin yang sedang melayani ujian, itu
+  # kegaduhan yang tidak dibayar apa pun. Log nginx pun terisi "signal process
+  # started" tiap lima menit sampai sebabnya tidak lagi bisa ditebak siapa pun.
+  if [ -f "$berkas" ] && cmp -s "${berkas}.baru" "$berkas"; then
+    rm -f "${berkas}.baru"
+    return 1
+  fi
+  mv "${berkas}.baru" "$berkas"
+  return 0
 }
 
 respons="$(curl -fsS -m 20 "${API_BASE}/api/scheduler/brand-domains?token=${SCHEDULER_TOKEN}")" \
@@ -287,11 +303,13 @@ while IFS= read -r domain; do
   # LANGKAH 1 — vhost HTTP lebih dulu, supaya tantangan Let's Encrypt punya
   # yang menjawab di port 80. Selalu ditulis ulang: isinya ikut berubah begitu
   # sertifikatnya ada.
-  tulis_vhost "$domain"
+  if tulis_vhost "$domain"; then
+    berubah=1
+  fi
   if [ ! -L "${ENABLED}/${PREFIX}${domain}" ]; then
     ln -sf "${AVAIL}/${PREFIX}${domain}" "${ENABLED}/${PREFIX}${domain}"
+    berubah=1
   fi
-  berubah=1
 
   if punya_sertifikat "$domain"; then
     hapus_penanda "$domain"
@@ -313,9 +331,12 @@ while IFS= read -r domain; do
   log "$domain: meminta sertifikat"
   if minta_sertifikat "$domain"; then
     hapus_penanda "$domain"
-    # LANGKAH 3 — tulis ulang, sekarang lengkap dengan blok 443.
-    tulis_vhost "$domain"
-    berubah=1
+    # LANGKAH 3 — tulis ulang, sekarang lengkap dengan blok 443. Di sini
+    # isinya PASTI berubah (blok 443 baru muncul), tetapi tetap diperiksa
+    # supaya hanya ada satu aturan tentang kapan nginx di-reload.
+    if tulis_vhost "$domain"; then
+      berubah=1
+    fi
     lapor "$domain" "aktif" "sertifikat terbit"
   else
     tandai_gagal "$domain"
