@@ -484,8 +484,32 @@ Pada sekolah dengan 800 siswa, bedanya bukan selera: tabel bisa dipindai dengan
 mata dari atas ke bawah, kartu harus digulir. Dan orang yang memakainya sekarang
 adalah orang yang terbiasa dengan tabel v1.
 
-**Tidak saya ubah** — ini keputusan rancangan yang mengenai banyak layar
-sekaligus lewat satu komponen, dan pantas Anda putuskan sendiri.
+**Diputuskan 3 September: tabel — dan sudah dikerjakan.** Enam layar berpindah
+dari kartu ke tabel: ResourcePage (Mata Pelajaran, Semester, Konfigurasi
+raport, Mapel tutor) ditambah Daftar Siswa admin dan tutor. Tiga puluh dua
+layar v2 lain sudah bertabel sejak awal — enam ini yang menyimpang.
+
+Keenam tindakan baris siswa tetap ada dan memanggil penangan yang sama:
+riwayat ujian, ubah, unduh kartu, cabut kartu, kartu baru, hapus. Ikon
+bertooltip, seperti v1 di tabel yang sama — enam tombol berlabel membuat satu
+sel selebar 430px. "Hapus" pindah ke ujung, menjauh dari tindakan harian.
+
+Tiga hal ikut terbetulkan saat mengerjakannya:
+
+- Tombol "cabut kartu" pada siswa tanpa kartu aktif kini tetap **menempati
+  ruangnya**. Dilepas dari alirannya, tombol sesudahnya bergeser, dan "Hapus"
+  satu baris berdiri tepat di bawah "Kartu baru" baris di atasnya.
+- Gender ditampilkan lewat kamus label: **"Laki-laki"/"Perempuan"**, bukan
+  `male`/`female`. Kamusnya sudah lama ada; dua halaman ini saja yang belum
+  memakainya, jadi selama ini kartu siswa memang menampilkan istilah basis
+  data.
+- Di bawah 720px setiap tombol dibuat selebar wadahnya — benar di dalam kartu,
+  salah di sel tabel: enam tombol menumpuk dan satu baris menjadi setinggi
+  300px. Diperbaiki lewat kelas tersendiri, bukan aturan umum, supaya puluhan
+  tabel lain tidak ikut berubah tanpa diperiksa.
+
+Diukur pada 390px dengan alat ukur repo sendiri: **luapan mendatar 0px, dan 38
+sasaran sentuh semuanya >= 44px.**
 
 **Satu cacat paritas kecil, sudah diperbaiki:** daftar ujian v2 hanya
 menampilkan waktu **mulai**; v1 menampilkan mulai DAN selesai. Pertanyaan yang
@@ -606,6 +630,7 @@ Impor Excel diurai excelize, tidak pernah disimpan, tidak pernah disajikan.
 - [x] Token disembunyikan pada langganan aktif, muncul lagi saat berakhir
 - [x] Tombol lihat sandi di 11 isian
 - [x] Dialog penjelas sebelum pemilih berkas terbuka
+- [x] **Logo sekolah menyembul keluar dari lingkarannya** di sidebar siswa — wadahnya elips 56x42 karena ukurannya mengikuti logo, kini persegi dan memotong isinya
 
 ### Perbaikan yang ditemukan sendiri
 - [x] **Kebijakan privasi & syarat layanan hanya satu kalimat** — dokumen yang jadi pegangan sekolah saat menyerahkan data siswanya

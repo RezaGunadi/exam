@@ -24,7 +24,7 @@ Prinsip yang dipegang:
 | 1 | Route uji beban ujian serentak | ✅ selesai | ✅ selesai |
 | 2 | Download QR buku error | ✅ selesai | ✅ selesai |
 | 3 | Harga buku, denda, hilang/ganti, kas masuk | ✅ selesai | ✅ selesai |
-| 4 | Tampilan v2 turun kelas dari v1 | — | ✅ cacat terukur selesai; banding visual belum |
+| 4 | Tampilan v2 turun kelas dari v1 | — | ✅ selesai — banding visual dikerjakan, temuannya ditutup |
 | 5 | Preview soal: jawaban tak ter-highlight | ✅ selesai | ✅ selesai |
 | 6 | Tanda "ragu-ragu" per soal | ✅ selesai | ✅ selesai |
 | 7 | Waktu ujian berkoma | ✅ selesai | ✅ selesai |
@@ -668,11 +668,33 @@ dan sudah ditambahkan berikut `student_count` agregat.
 **Saringan lanjutan hasil ujian.** Rentang nilai, urutkan/arah, dan saring per
 kelas sudah ada di `admin/exam-results` v2, di antarmuka maupun di handler-nya.
 
-### Yang MASIH tersisa
+### Yang MASIH tersisa — tidak ada lagi
 
-**Banding rasa berdampingan.** Itu butuh melihat kedua aplikasi berjalan, dan
-tidak ada peramban di lingkungan ini. Satu-satunya bagian Item 4 yang belum
-dikerjakan.
+**Banding rasa berdampingan** sempat tertahan karena butuh melihat kedua
+aplikasi berjalan. Dikerjakan 3 September 2026: v1 dan v2 dijalankan di atas
+basis data yang sama, 16 layar dipotret pada 1440x900, ukurannya dibandingkan.
+Rinciannya di STATUS.md.
+
+Satu temuan merugikan yang keluar dari sana — **daftar berkartu lawan tabel** —
+sempat ditahan sebagai keputusan pemilik karena mengenai beberapa layar lewat
+satu komponen. Keputusannya diambil hari yang sama: **tabel**. Alasannya bukan
+selera:
+
+- daftar yang sama setinggi 915px sebagai tabel dan 1.476px sebagai kartu — 5
+  baris muat sekaligus lawan 3, yang ketiga terpotong;
+- baris seragam yang dibandingkan satu sama lain dipindai turun dengan mata,
+  sementara kartu memindahkan letak tiap labelnya sehingga mata mencarinya
+  ulang di setiap baris;
+- 32 layar v2 lain sudah memakai tabel — enam layar berkartu itu yang
+  menyimpang, bukan sebaliknya.
+
+Enam layar diubah (ResourcePage: Mata Pelajaran, Semester, Konfigurasi raport,
+Mapel tutor; ditambah Daftar Siswa admin dan tutor). Keenam tindakan baris
+siswa tetap ada. Diperiksa pada 390px: luapan mendatar 0px, 38 sasaran sentuh
+semuanya >= 44px.
+
+Dengan itu Item 4 tidak menyisakan apa pun, dan begitu pula seluruh rencana
+ini.
 
 ---
 
