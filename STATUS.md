@@ -186,20 +186,33 @@ Setelah blok itu dikeluarkan, isi keempat halaman berimbang: `/about` +9 kata,
 
 ---
 
-## BELUM — UI/UX
+## UI/UX
 
-### 1. Blok ajakan v1 di halaman statis — MENUNGGU KEPUTUSAN ANDA
-- [ ] Ditambahkan, atau diputuskan tidak perlu
+### ✅ Blok ajakan v1 di halaman statis — SELESAI 3 September
+- [x] Terpasang di `/about`, `/contact`, `/privacy-policy`, dan `/terms`
+- [x] Dijadikan **satu komponen**, dipakai halaman depan dan halaman statis
+- [x] Kata-kata halaman depan tidak berubah sama sekali
 
-v1 menempelkan blok promosi yang sama di bawah **setiap** halaman statis:
-"Mulai Ujian Online Tanpa Biaya / 100% Gratis Dipakai / 500 Token Saat Daftar /
-Bonus Kode Referral" — sekitar 100 kata. v2 tidak punya itu di `/about`,
-`/contact`, `/privacy-policy`, dan `/terms`.
+v1 menempelkan blok promosi yang sama di bawah **setiap** halaman statis lewat
+satu partial (`partials/free-offer.blade.php`): "100% Gratis Dipakai / 500 Token
+Saat Daftar / Bonus Kode Referral". Itu satu-satunya perbedaan isi yang tersisa
+antara halaman statis kedua versi.
 
-**Itu satu-satunya perbedaan isi yang tersisa** antara halaman statis v1 dan
-v2. Tidak saya tambahkan sendiri karena ini keputusan produk, bukan cacat:
-menaruh ajakan mendaftar di bawah kebijakan privasi adalah pilihan, dan
-halaman depan v2 sudah punya bagian ajakannya sendiri.
+**Bukan disalin, melainkan dipindahkan ke satu tempat.** v2 sudah punya blok itu
+di halaman depan, tetapi tertulis langsung di dalam halamannya. Menyalinnya ke
+halaman statis berarti dua salinan yang akan berbeda isinya suatu saat tanpa ada
+yang menyadari — angka token, kata-katanya, dan tautan daftarnya kini hanya ada
+di `penawaran-gratis.tsx`.
+
+**Judulnya berbeda dengan sengaja.** Halaman depan tetap "Mulai ujian online
+tanpa biaya."; halaman statis memakai "Belum memakai Kelas Privat?". Orang yang
+sampai ke kebijakan privasi datang untuk membaca kebijakan — kalimat pembuka
+yang sama akan terbaca seperti iklan yang menyela. Bloknya juga ditempatkan
+**di luar** kartu prosa: dokumen yang menjadi pegangan hukum tidak boleh
+terlihat memuat ajakan mendaftar di dalam badannya.
+
+Diukur setelah terpasang: delapan halaman publik, **nol** pelanggaran axe-core,
+nol luapan mendatar.
 
 ### ✅ Aksesibilitas layar SETELAH login — SELESAI 2 September
 - [x] Aturan jsx-a11y dinyalakan penuh di `eslint.config.mjs`
@@ -269,13 +282,10 @@ benar, tidak pernah bisa tampil.
 Senyap dari sisi server — pengalihannya sendiri berhasil, yang 404 adalah
 tujuannya di host lain. Log tetap bersih.
 
-### 1. Blok ajakan v1 di halaman statis — MENUNGGU KEPUTUSAN ANDA
-- [ ] Ditambahkan, atau diputuskan tidak perlu
+### ✅ Blok ajakan v1 di halaman statis — SELESAI 3 September
 
-v1 menempelkan blok promosi yang sama di bawah **setiap** halaman statis
-(~100 kata). Setelah blok itu dikeluarkan dari hitungan, isi keempat halaman
-berimbang: `/about` +9 kata, `/contact` +70, `/privacy-policy` −22,
-`/terms` −24.
+Lihat uraiannya di bagian UI/UX di atas. Setelah blok itu terpasang, isi keempat
+halaman statis v2 tidak lagi kurang dari v1 dalam hal apa pun.
 
 ---
 
