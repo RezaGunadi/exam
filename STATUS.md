@@ -700,3 +700,89 @@ server:
       berkas bertanggal dan tidak menyentuh yang lama) sehingga perlu dihapus
       sekali dengan tangan; dan `LOG_LEVEL=debug` di `.env` produksi — sebab
       utama lognya sebesar itu — hanya bisa diubah di sana.
+
+---
+
+# Keadaan 3 September — sesudah rencana v1/v2 habis
+
+Keempat dokumen rencana sudah nol butir belum-centang. Yang di bawah ini
+seluruhnya muncul SESUDAH itu, dari pekerjaan yang belum sempat tercatat.
+
+## SUDAH, dan sudah tayang
+
+### Penyimpanan
+- [x] **Seluruh unggahan v2 lewat R2.** `saveUpload` sudah lama ada tetapi
+      hanya SATU dari belasan jalur unggah yang memakainya; sisanya menulis
+      langsung ke disk lewat `os.Create`. Kini semuanya lewat `saveUpload` atau
+      `simpanUnggahanStream`, dijaga `unggahan_lewat_r2_test.go`.
+- [x] **Pembuat PDF membaca lewat `daftarGambarPDF`.** Cacat kembarnya: gofpdf
+      diberi jalur disk, dan begitu berkasnya di R2 ia melewati gambar tanpa
+      satu pun galat — raport tanpa kop, kartu tanpa logo, log bersih.
+- [x] **Satu titik nyasar di `r2_account_id`** membuat endpoint R2 tidak
+      resolve sama sekali. Selama unggahan menulis ke disk ini tak terlihat;
+      sesudah dialihkan ke R2 ia menjadi kegagalan total. Diperbaiki di kode
+      (`endpointR2`, ada ujinya) dan di data produksi. Diuji tulis-baca-hapus
+      langsung ke bucket: 200 / 200 / 204.
+- [x] **Dua berkas yang masih di disk diimpor ke R2** (424 KB). Salinan lokal
+      sengaja ditinggal — `openUpload` mencoba R2 dulu lalu mundur ke disk.
+
+### Logo
+- [x] **Satu logo per sekolah.** Panel owner menulis `school_brands.logo_path`
+      sementara `/admin/school` membaca `schools.logo` — logonya tersimpan tapi
+      layar sebelah kosong. Kanoniknya kini `schools.logo`, kolom brand turun
+      jadi cadangan sehingga berlaku tanpa memindahkan data.
+- [x] **Ikon tab mundur ke logo** bila tidak disetel sendiri.
+- [x] **Unggah logo sekolah di `/admin/school`** — gap paritas v1 yang tersisa.
+
+### Tampilan
+- [x] **Formulir edit pindah ke modal** di seluruh layar: `ResourcePage` (lima
+      halaman), `admin/classes`, `admin/question-stories`, `admin/tutors`, dan
+      `admin/questions` yang modalnya buatan tangan tanpa Escape/kurungan
+      fokus/kunci gulir.
+- [x] **Kontras kontrol dinaikkan** dari 1,33:1 ke 3,28:1 (WCAG 1.4.11).
+      Perbaikan pertamanya sempat TIDAK berlaku: `.field input` kalah
+      kekhususan dari rantai `input:not([type=…])` yang bernilai (0,4,1).
+      Ketahuan hanya karena diukur di peramban.
+
+## BELUM
+
+### Belum pernah dilihat mata — butuh satu akun admin uji
+- [ ] Modal formulir saat dipakai, terutama modal soal yang panjang di layar HP
+- [ ] Lima bagian profil sekolah (moto, visi-misi, angka, galeri, alamat) —
+      di produksi semuanya masih kosong, jadi belum pernah tergambar berisi
+- [ ] Logo sekolah di `/admin/school` sesudah penyatuan (API-nya sudah
+      dibuktikan lewat `/api/brand`)
+
+### Dua panel masih berformulir-di-atas-daftar
+- [ ] `/owner/schools` — panel penyesuaian token (baris 266) dan branding
+      premium (baris 315), keduanya dibuka dari tombol di tabel baris 421
+- [ ] `/owner/payments` — panel rincian (baris 332), dibuka dari baris 670
+
+Lolos dari sapuan sebelumnya karena keduanya memakai nama state selain
+`editing*` (`brandFor`, `bukaRincian`).
+
+### Dua uji merah di main
+- [ ] `alamat-situs` — mengharap `exam.kelasprivat.id`, yang berjalan
+      `ujian.kelasprivat.id`. **Ujinya yang basi**, tetapi nilainya dipakai
+      canonical, `og:url`, dan sitemap: perlu keputusan alamat kanonik
+- [ ] `kelas-hantu` — `page-heading` (`admin/alumni`) dan `wa-daftar`
+      (`owner/wa`) dipakai tanpa aturan CSS; elemennya tampil polos
+
+### Server
+- [ ] `AUTO_MIGRATE=false` — kolom baru dari versi berikutnya tidak akan
+      pernah terbentuk. Kolom branding lolos hanya karena
+      `EnsureSchoolBrandTable` memanggil AutoMigrate sendiri
+- [ ] Disk 80% (13 GB sisa); tiap `make update` menambah lapisan image
+- [ ] `company-kelasprivat`: `511bb4d` (SEO 500) dan `cb7b4b0` (rotasi log)
+      **belum ter-deploy** — diperiksa 3 September, keduanya bukan leluhur HEAD
+      di server
+- [ ] `laravel.log` kini **135 MB** (naik dari 127 MB). `.env` produksi menyetel
+      `LOG_STACK=single` secara eksplisit, jadi perbaikan `config/logging.php`
+      **tidak akan berpengaruh** sampai `.env` itu diubah — bersama
+      `LOG_LEVEL=debug`
+
+### Catatan
+- [ ] Sekolah 64 punya logo bernama `…8vuU9LHA1U.php56`. v2 tidak pernah
+      mengeksekusinya, tetapi ekstensi itu menandakan validasi unggah v1
+      menerima apa saja — perlu diperiksa bila v1 masih menyajikan folder itu
+
