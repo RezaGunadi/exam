@@ -453,7 +453,7 @@ dikosongkan lagi. Ada ujinya sendiri.
 
 ---
 
-## Item 4 — Tampilan v2 di bawah v1  🔄 CACAT TERUKUR SELESAI, banding visual belum
+## Item 4 — Tampilan v2 di bawah v1  ✅ SELESAI (banding visual dikerjakan 3 September)
 
 ### Yang dikerjakan: audit yang bisa dibuktikan, bukan tebakan
 
@@ -463,8 +463,11 @@ lingkungan ini. Yang dikerjakan sebagai gantinya adalah audit atas hal-hal yang
 **bisa diverifikasi tanpa merender**: inventaris halaman, lint, aturan kaskade
 CSS, dan angka patok di tata letak.
 
-Perbandingan rasa/estetika berdampingan **masih tersisa** dan jujur belum
-dikerjakan.
+Perbandingan berdampingan itu **sudah dikerjakan pada 3 September 2026**: v1 dan
+v2 dijalankan bersamaan di atas basis data yang sama, 16 layar dipotret pada
+1440x900, dan ukurannya dibandingkan. Hasilnya ada di STATUS.md — ringkasnya, v2
+unggul di hampir semua layar, dengan satu perbedaan yang merugikan: daftar yang
+memakai komponen ResourcePage tampil sebagai kartu, sedangkan v1 memakai tabel.
 
 ### Dugaan awal yang TERBANTAH
 
@@ -1361,7 +1364,8 @@ Dua perbaikan yang muncul saat mengerjakannya:
   dihilangkan dari respons bila tidak dibagikan, dan ujian yang sudah
   terhapus ikut tertutup.
 
-**Belum:** tombol ragu-ragu (item 6).
+**Item 6 (tombol ragu-ragu) SELESAI juga** — lihat judulnya di atas. Baris ini
+dulu berbunyi "belum" dan tertinggal saat itemnya diselesaikan.
 
 ### Penghalang yang ditemukan saat menguji  ✅ SUDAH DIPERBAIKI
 

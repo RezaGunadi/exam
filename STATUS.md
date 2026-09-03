@@ -314,26 +314,235 @@ tempat lain yang menyimpannya untuk tahun sebelum enrollment dipakai.
 
 ---
 
-## BELUM — fitur (setelah UI beres)
+## Fitur
 
-### 4. Tanda tangan kepala sekolah tidak punya isian
-- [ ] Isian unggah tanda tangan di `/admin/school`
+### ✅ 4. Tanda tangan kepala sekolah — SELESAI 2 September
+- [x] Isian unggah + pratinjau + hapus di `/admin/school`
+- [x] Endpoint sendiri (`POST`/`DELETE /api/admin/school/signature`), bukan lewat PUT
+- [x] Jenis gambar dikenali dari **isi berkas**, bukan dari ekstensinya
+- [x] Guru ditolak; berkasnya hanya bisa dibaca admin sekolah itu sendiri
+- [x] Tanda tangannya **muncul di raport** yang dicetak
 
-Kolom `schools.signature_image` **sudah ada**, dan **4 sekolah sudah
-mengisinya** — lewat v1. Di v2 tidak ada satu pun isian untuk itu, jadi sekolah
-yang pindah ke v2 tidak bisa mengganti atau memasangnya.
+Kolom `schools.signature_image` sudah ada dan 4 sekolah sudah mengisinya lewat
+v1; di v2 tidak ada satu pun isian untuk itu.
 
-Pekerjaan kecil dengan akibat yang sudah nyata, tetapi ditaruh setelah UI
-sesuai permintaan Anda.
+**Satu lubang ikut ditutup di sepanjang jalan.** Kolom itu terdaftar sebagai
+boleh-diubah lewat `PUT /api/admin/school`, yang menyalin nilai kiriman klien
+apa adanya — artinya admin mana pun bisa menunjuk kolom itu ke jalur berkas
+yang ia karang sendiri. Kini jalur berkas hanya bisa dibentuk server.
 
-### 5. Tambah/hapus kategori buku pindah ke owner
-- [ ] `POST` dan `DELETE` kategori dibatasi owner
-- [ ] Layar pengelolaan kategori di panel owner
-- [ ] Layar admin menjadi baca-saja
+**Isiannya tidak berhenti di penyimpanan.** Nilai yang tersimpan tetapi tidak
+pernah tampil di mana pun bukan fitur; raport yang dicetak kini menggambar
+tanda tangannya di ruang kosong yang selama ini disediakan untuk tanda tangan
+tangan. Sekolah yang belum mengunggah tidak kehilangan apa pun — ruangnya tetap
+kosong.
 
-Kategori **per sekolah** (669 baris di produksi), dan jalur "Lainnya" saat input
-buku memakai kode yang **terpisah** (`resolveBookCategory`) — jadi membatasi
-endpoint kategori tidak akan mematahkannya. Sudah diverifikasi.
+Nilai warisan v1 berupa **kunci objek R2** (`schools/signatures/…`), bukan jalur
+`/api/files/…`. Keduanya ditangani: yang lama tetap tampil di layar lewat
+pengalih `/api/aset/*`, dan tidak pernah diperlakukan sebagai jalur disk saat
+berkas lama dihapus.
+
+**Cacat lama yang ikut ketemu:** gofpdf tidak menggagalkan `ImageOptions` di
+tempat — ia menyimpan galat internal, dan `Output` yang kemudian gagal. Satu
+watermark raport yang hilang karena itu sudah cukup membuat **seluruh** raport
+sekolah gagal diunduh dengan 500. Kini keberadaan berkas diperiksa lebih dulu,
+dan berkas rusak dilewati tanpa menggagalkan dokumennya.
+
+### ✅ 5. Kategori buku pindah ke owner — SELESAI 2 September
+- [x] Tambah, ubah nama, gabung, dan hapus **dibatasi owner**
+- [x] Layar `/owner/library-categories` dengan pemilih sekolah
+- [x] Layar admin menjadi **baca-saja**
+
+Rutenya **dicabut** dari `/api/admin`, bukan sekadar tombolnya disembunyikan:
+alamat endpoint bisa ditebak dari daftar yang masih boleh dibaca. Diuji dengan
+memanggil keempat alamat admin itu langsung — tidak ada satu pun yang berhasil,
+dan keadaan datanya utuh sesudahnya.
+
+Jalur **"Lainnya"** saat memasukkan buku sengaja tetap terbuka: menutupnya
+berarti pendataan buku berhenti di tengah hanya karena kategorinya belum
+terdaftar. Yang pindah ke owner adalah **membereskan daftarnya**, bukan
+mencatat bukunya.
+
+Sekolah diambil dari **jalur** (`{schoolID}`), bukan dari sesi — owner tidak
+punya sekolah sendiri, dan memakai sesinya akan menempelkan kategori ke sekolah
+yang kebetulan tertaut ke akunnya. Sekolah yang tidak ada ditolak 404, supaya
+tidak ada kategori yatim yang tersimpan tanpa bisa dibuka dari layar mana pun.
+
+---
+
+## UI/UX
+
+### ✅ Aksesibilitas layar SETELAH LOGIN — diukur di peramban, bukan dibaca dari kode
+- [x] 33 layar setelah login diukur axe-core (admin, siswa, owner)
+- [x] **36 simpul bermasalah → nol**, diukur ulang halaman per halaman
+- [x] Alat ukurnya disimpan: `frontend/scripts/ukur-a11y-login.mjs`
+
+**Sapuan pertama berbohong, dan sebabnya perlu ditulis.** Ia dijalankan lewat
+server dev yang sedang hidup — dan server itu ternyata menyajikan halaman yang
+TIDAK PERNAH terhidrasi: React termuat, tetapi tidak satu pun panggilan API
+keluar dari peramban. Yang terukur karena itu hanya kerangka server: tanpa menu
+(35 tautan bilah samping tidak ada satu pun), tanpa isi tabel, tanpa dialog.
+Hasilnya "24 simpul", dan angka itu terlihat meyakinkan.
+
+Diulang di atas **build produksi** yang berjalan sendiri, muncul 12 simpul lagi
+yang selama ini tersembunyi — termasuk satu yang **critical**:
+
+| dampak | masalah | tempat |
+|---|---|---|
+| critical | tombol **hapus** tanpa nama sama sekali | 2 tombol, daftar soal |
+| moderate | dua landmark `<nav>` tanpa nama pembeda | 7 layar siswa |
+| moderate | judul kartu `<h4>` di bawah `<h2>` | daftar soal & mapel |
+| minor | header kolom tabel kosong | daftar kelas |
+
+Tombol hapus itu hanya berisi ikon tong sampah. Pembaca layar mengumumkannya
+sebagai "button" — tanpa kata lain — dan itu tombol yang paling mahal bila
+salah tekan.
+
+Sebelumnya yang menjaga layar setelah login hanya aturan jsx-a11y di eslint —
+dan lint membaca **kode**, bukan halaman yang sudah tergambar. Yang tidak bisa
+dilihatnya justru yang paling merugikan di sini.
+
+| dampak | masalah | tempat |
+|---|---|---|
+| serious | kontras `.stat-label` **1,07:1** | 4 simpul, halaman Laporan |
+| moderate | `heading-order`: judul panel `<h3>` di bawah `<h1>` | 19 halaman |
+| minor | header kolom tabel kosong | perpustakaan |
+
+**Kontras 1,07:1 — penyebabnya aturan CSS tanpa lingkup.** `refresh.css` memuat
+`.stat-label { color: rgba(255,255,255,0.78) }` tanpa pembatas apa pun, dan
+berkas itu dimuat untuk **seluruh** aplikasi lewat `layout.tsx`. Warnanya benar
+di tempat asalnya — kartu statistik halaman depan berlatar gelap — tetapi di
+halaman Laporan admin ia menjadi putih di atas `#f4f7fb`. Angkanya ada di sana,
+tersimpan benar, dan tidak terbaca oleh siapa pun.
+
+Aturannya **dipindahkan** ke `landing.css` (tempat seluruh gaya halaman depan
+harus tinggal, dijaga `uji-kelas-landing.mjs`), dan halaman Laporan memakai pola
+kartu yang sama dengan layar lain: `panel stat-card stat-card-soft` + `muted`.
+
+**heading-order.** Tiap halaman punya satu `<h1>` (judul halaman di AppShell),
+lalu judul panelnya `<h3>` — melompati satu tingkat, sehingga pembaca layar yang
+menelusuri daftar judul kehilangan susunannya. Sebagian layar **sudah** memakai
+`<h2>` untuk hal yang sama (absensi, profil, dashboard, mapel, pembayaran) — dan
+justru layar itulah yang bersih saat diukur. Jadi ini bukan aturan baru:
+225 judul di 69 berkas disamakan dengan yang sudah benar.
+
+Ukurannya **dijaga tetap**: `<h2>` bawaan 1,35rem, sedangkan judul panel selama
+ini 1,05rem di sebagian besar layar. Satu aturan CSS mengembalikan ukurannya,
+supaya yang berubah hanya **tingkatannya**, bukan tampilannya. Akibat yang
+disengaja: layar yang sudah memakai `<h2>` kini ikut 1,05rem — setelah ini
+seluruh judul panel berukuran sama, yang sebelumnya tidak.
+
+**Halaman publik sengaja tidak ikut disapu.** Susunan judulnya sendiri, sudah
+diukur bersih, dan gayanya diatur `landing.css` yang mengunci pada `h3`.
+
+**Cacat pada alat ukurnya sendiri, ditemukan saat memakainya.** `Page.navigate`
+kembali SEBELUM dokumen baru menggantikan yang lama, jadi pemeriksaan "dokumen
+siap" lolos pada halaman **sebelumnya**. Hasil "bersih"-nya terlihat meyakinkan
+dan tidak menandakan apa pun. Kini alamatnya diperiksa lebih dulu — dan
+catatannya ditulis di berkas skripnya, karena kesalahan seperti ini tidak
+meninggalkan gejala.
+
+---
+
+## Banding tampilan v1 vs v2 — dikerjakan, dan inilah hasilnya
+
+Butir terakhir dari `PLAN_EXAM_V1_V2.md` (Item 4) yang selama ini tertulis
+"banding visual belum". Sekarang sudah: **v1 dan v2 dijalankan berdampingan di
+BASIS DATA YANG SAMA** (`exam_banding`, dibangun dari migrasi v1), 16 layar
+dipotret pada viewport 1440×900, dan angkanya diukur — bukan dikira.
+
+**Yang v2 lebih baik**, dan selisihnya besar:
+
+| layar | v1 | v2 |
+|---|---|---|
+| dashboard | 7 angka | **12 angka + grafik 7 hari** |
+| saringan daftar ujian | 6 isian | **10 isian** |
+| daftar soal | 5.755px untuk 2 soal | **1.063px**, opsi & kunci ikut terlihat |
+| data sekolah | 1.819px | **1.190px** |
+
+**Satu perbedaan yang merugikan, dan sumbernya satu tempat.** Layar yang memakai
+komponen bersama `ResourcePage` menampilkan daftar sebagai **kartu**, sedangkan
+v1 memakai **tabel**:
+
+| layar | v1 | v2 |
+|---|---|---|
+| daftar siswa | 915px, 5 baris tabel muat sekaligus | **1.476px**, 3 kartu, baris ketiga terpotong |
+| mata pelajaran | tabel | kartu |
+| paket soal | tabel | kartu |
+
+Pada sekolah dengan 800 siswa, bedanya bukan selera: tabel bisa dipindai dengan
+mata dari atas ke bawah, kartu harus digulir. Dan orang yang memakainya sekarang
+adalah orang yang terbiasa dengan tabel v1.
+
+**Tidak saya ubah** — ini keputusan rancangan yang mengenai banyak layar
+sekaligus lewat satu komponen, dan pantas Anda putuskan sendiri.
+
+**Satu cacat paritas kecil, sudah diperbaiki:** daftar ujian v2 hanya
+menampilkan waktu **mulai**; v1 menampilkan mulai DAN selesai. Pertanyaan yang
+dibawa ke layar itu menjelang hari ujian justru "kapan ditutup". Ditumpuk dalam
+satu sel, bukan ditambah satu kolom.
+
+**Luapan mendatar: nol di kedua versi**, di seluruh 16 layar.
+
+Alat pemotretnya ada di `scratchpad/banding-visual.mjs`, dan
+`frontend/next.config.ts` kini menerima `NEXT_DIST_DIR` supaya build pengukuran
+tidak menimpa `.next` milik server dev yang sedang berjalan.
+
+---
+
+## Celah yang sebelumnya belum pernah disapu
+
+### ✅ Pembatasan laju di luar login — SELESAI 2 September
+- [x] `POST /auth/reset-password` — 10 percobaan / 15 menit per alamat
+- [x] `POST /landing/contact` & `/landing/demo-request` — 5 kiriman / jam, penjaga yang sama
+- [x] Token scheduler — 10 **kegagalan** / 10 menit; panggilan yang sah tidak memakan jatah
+
+Reset password adalah **satu-satunya tempat** tebakan atas token reset bisa
+diuji, dan sebelumnya tidak ada apa pun yang menghitung berapa kali seseorang
+mencoba. Yang menjaganya hanya panjang tokennya sendiri — pertahanan tanpa
+lapisan kedua.
+
+Kontak/demo menulis satu baris lead **dan** mengirim notifikasi keluar tiap
+kiriman. Kuota pengiriman yang habis di sana juga memadamkan notifikasi tagihan
+yang memakai jalur yang sama.
+
+Penjaga token scheduler hanya menghitung yang **gagal**. Menghitung seluruh
+panggilan akan mengunci scheduler-nya sendiri setelah sepuluh panggilan yang
+benar — pembatas yang menutup pintu bagi pemiliknya, dengan gejala "pekerjaan
+terjadwal berhenti tanpa alasan". Ada ujinya, dan uji itu memanggil 30 kali
+berturut-turut dengan token yang benar.
+
+**Yang sengaja TIDAK dibatasi:** pembacaan halaman depan (`/pages/{slug}`,
+`/landing/stats`, `/brand`, `/brand/direktori`). Semuanya baca-saja dan justru
+dipanggil beruntun oleh satu pengunjung yang wajar; pembatas di sana lebih
+mungkin memutus halaman depan sekolah daripada menahan siapa pun.
+
+### ✅ Validasi unggahan — SELESAI 2 September
+- [x] Lampiran absensi: jenis dari **isi berkas**, ekstensi ikut hasil pengenalan
+- [x] Lampiran absensi **bisa dibuka kembali** oleh sekolahnya sendiri
+- [x] Jalur unggahan lain disurvei dan dinyatakan aman, dengan alasannya
+
+**Satu-satunya jalur tanpa daftar-putih sama sekali** ternyata lampiran absensi:
+ekstensi apa pun diterima apa adanya, dan yang tanpa ekstensi disimpan sebagai
+`.bin`. Penyaji berkas menentukan `Content-Type` dari ekstensi itu, jadi
+`surat-izin.html` disajikan sebagai **text/html dari asal yang sama dengan
+aplikasinya**. `X-Content-Type-Options` tidak menolong di sana — yang
+dicegahnya adalah tebakan peramban, sedangkan tipe ini memang dinyatakan.
+
+v1 hanya menerima gambar dan memeriksa isinya. Jadi ini **kemunduran dari v1**,
+bukan pengetatan baru.
+
+**Cacat kedua di layar yang sama:** prefix `attendance` tidak pernah terdaftar
+di aturan akses berkas, dan yang tidak terdaftar ditolak. Lampiran absensi bisa
+diunggah tetapi **tidak bisa dibuka siapa pun kecuali owner** — admin yang baru
+saja mengunggahnya menerima 403 atas berkasnya sendiri, dan di layar itu
+terbaca sebagai gambar rusak. Kini admin dan guru sekolah itu bisa membukanya,
+dan siswa hanya miliknya sendiri: isinya alasan seseorang tidak masuk sekolah.
+
+Jalur unggahan lain **sudah** punya daftar-putih yang menutup tipe eksekutabel
+(`.html`, `.svg`, `.js`, `.xml`), dan berkas ber-ekstensi gambar yang isinya
+bukan gambar disajikan sebagai `image/*` dengan `nosniff` — tidak dieksekusi.
+Impor Excel diurai excelize, tidak pernah disimpan, tidak pernah disajikan.
 
 ---
 
@@ -414,12 +623,10 @@ endpoint kategori tidak akan mematahkannya. Sudah diverifikasi.
 
 ## Yang belum pernah disapu sama sekali
 
-Bukan permintaan, tetapi celah yang saya ketahui:
+- [x] ~~Pembatasan laju di luar login, pendaftaran, dan cek nilai~~ — selesai, lihat di atas
+- [x] ~~Validasi unggahan di luar logo brand~~ — selesai, lihat di atas
 
-- [ ] Pembatasan laju di luar login, pendaftaran, dan cek nilai
-- [ ] Validasi unggahan di luar logo brand — yang lain masih percaya ekstensi berkas
-
-(Aksesibilitas layar ujian dipindahkan ke daftar UI di atas.)
+Daftar ini kosong sekarang.
 
 ---
 
